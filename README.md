@@ -17,7 +17,7 @@ Decky Sunshine is a plugin, allowing to easily toggle the Sunshine game streamin
 
 3. Configure Sunshine and pair your devices
 
-4. Download the latest [ZIP from releases](https://example.com/decky)
+4. Download the latest ZIP from [releases](https://github.com/s0t7x/decky-sunshine/tags)
 
 5. Go into Game Mode
 
