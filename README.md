@@ -37,5 +37,5 @@ Contributions to the Decky Sunshine are welcome! If you have any ideas for impro
 
 ## Acknowledgements
 
-- Thanks to the Decky!
+- Thanks to Decky!
 - Special thanks to the developers of Sunshine for creating the game streaming server.
