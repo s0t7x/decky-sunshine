@@ -1,7 +1,7 @@
 import decky_plugin
 import os
 
-from py_modules.sunshine import SunshineController
+from sunshine import SunshineController
 
 class Plugin:
     sunshineController = SunshineController()

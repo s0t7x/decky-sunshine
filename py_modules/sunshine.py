@@ -53,7 +53,6 @@ class SunshineController:
             self.controllerStore = ControllerStore()
         # instead here is test stuff now
         # TODO: REMOVE DANGEROUS!!!
-        self.setAuthHeader("sunshine", "frischmilch%1")
         
     def loadStateFromDisk(self) -> bool:
         # TODO: implement
@@ -87,7 +86,7 @@ class SunshineController:
         if(self.isRunning()):
             return False
         try:
-            self.shellHandle = subprocess.Popen("sh -c 'flatpak run dev.lizardbyte.app.Sunshine -0'", user=0, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, preexec_fn=os.setsid)
+            self.shellHandle = subprocess.Popen("sh -c 'PULSE_SERVER=unix:$(pactl info | awk '/Server String/{print$3}') flatpak run dev.lizardbyte.app.Sunshine -0'", user=0, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, preexec_fn=os.setsid)
         except:
             self.shellHandle = None
             return False
