@@ -35,6 +35,11 @@ class Plugin:
         send = sunshineController.sendPin(pin)
         decky_plugin.logger.info("PIN " + (send and "NOT ") + "send")
         return send
+    
+    async def setAuthHeader(self, username, password):
+        decky_plugin.logger.info("Sending PIN...")
+        sunshineController.setAuthHeader(username, password)
+        decky_plugin.logger.info("AuthHeader set")
 
     async def _unload(self):
         decky_plugin.logger.info("Decky Sunshine unloaded")

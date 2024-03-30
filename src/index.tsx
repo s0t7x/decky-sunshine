@@ -7,71 +7,90 @@ import {
   staticClasses,
   ButtonItem,
   Spinner,
-  Navigation,
+  // Navigation,
+  TextField,
 } from "decky-frontend-lib";
 import { VFC, useEffect, useState } from "react";
 import { FaSun } from "react-icons/fa";
 import { NumpadInput } from "./components/NumpadInput";
 
-// interface AddMethodArgs {
-//   left: number;
-//   right: number;
-// }
-
-const __unused = (...argv: any[]) => { argv.toString() }
-
 const Content: VFC<{ serverAPI: ServerAPI }> = ({ serverAPI }) => {
-  const [sunshineIsEnabled, setSunshineIsEnabled] = useState<boolean>(false);
-  const [wantSetSunshineEnabled, setWantSetSunshineEnabled] = useState<boolean>(false);
-  const [pin, setPin] = useState("");
-  const [resPin, setResPin] = useState<any>();
+  const [sunshineIsRunning, setSunshineIsRunning] = useState<boolean>(false);
+  const [sunshineIsAuthorized, setSunshineIsAuthorized] = useState<boolean>(false);
 
-  __unused(setSunshineIsEnabled)
+  const [wantToggleSunshine, setWantToggleSunshine] = useState<boolean>(false);
+
+  const [localPin, setLocalPin] = useState("");
+
+  const [localUsername, setLocalUsername] = useState("sunshine");
+  const [localPassword, setLocalPassword] = useState("");
 
   const sendPin = async () => {
     const result = await serverAPI.callPluginMethod<any, number>(
       "sendPin",
       {
-        pin
+        pin: localPin
       }
     );
     console.log("[SUN]", "sendPin result", result)
-    if (result.success) {
-      setResPin(result);
-    } else {
-      setResPin(undefined);
-    }
   }
 
   const sunshineCheckRunning = async () => {
     const result = await serverAPI.callPluginMethod<any, number>(
-      "sunshineIsOnline",
+      "sunshineIsRunning",
       {
       }
     );
-    console.log("[SUN]", "checkRunning result", result)
+    console.log("[SUN]", "sunshineCheckRunning result", result)
     if (result.success) {
-      setSunshineIsEnabled(Boolean(result.result));
+      setSunshineIsRunning(Boolean(result.result));
     } else {
-      setSunshineIsEnabled(false);
+      setSunshineIsRunning(false);
     }
   };
 
-  useEffect(() => {
-    setWantSetSunshineEnabled(sunshineIsEnabled)
-  }, [sunshineIsEnabled])
+  const sunshineCheckAuthorized = async () => {
+    const result = await serverAPI.callPluginMethod<any, number>(
+      "sunshineIsAuthorized",
+      {
+      }
+    );
+    console.log("[SUN]", "sunshineCheckAuthorized result", result)
+    if (result.success) {
+      setSunshineIsAuthorized(Boolean(result.result));
+    } else {
+      setSunshineIsAuthorized(false);
+    }
+  };
+
+  const setAuthHeader = async () => {
+    const result = await serverAPI.callPluginMethod<any, number>(
+      "setAuthHeader",
+      {
+        username: localUsername,
+        password: localPassword
+      }
+    );
+    console.log("[SUN]", "setAuthHeader result", result)
+    sunshineCheckAuthorized()
+  }
 
   useEffect(() => {
-    if (wantSetSunshineEnabled != sunshineIsEnabled) {
-      if (wantSetSunshineEnabled) {
-        console.log("[SUN]", "should enable")
+    setWantToggleSunshine(sunshineIsRunning)
+    sunshineCheckAuthorized()
+  }, [sunshineIsRunning])
+
+  useEffect(() => {
+    if (wantToggleSunshine != sunshineIsRunning) {
+      if (wantToggleSunshine) {
+        console.log("[SUN]", "should start")
         serverAPI.callPluginMethod<any, number>(
           "sunshineStart",
           {
           }
         );
       } else {
-        console.log("[SUN]", "should disable")
+        console.log("[SUN]", "should stop")
         serverAPI.callPluginMethod<any, number>(
           "sunshineStop",
           {
@@ -80,26 +99,33 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ serverAPI }) => {
       }
       window.setTimeout(() => sunshineCheckRunning(), 1000)
     }
-  }, [wantSetSunshineEnabled])
+  }, [wantToggleSunshine])
 
   sunshineCheckRunning()
 
-  return (wantSetSunshineEnabled != sunshineIsEnabled) ? <Spinner></Spinner> :
+  return (wantToggleSunshine != sunshineIsRunning) ? <Spinner></Spinner> :
     <PanelSection>
       <PanelSectionRow>
         <ToggleField
           label="Enabled"
-          checked={wantSetSunshineEnabled}
-          onChange={setWantSetSunshineEnabled}
+          checked={wantToggleSunshine}
+          onChange={setWantToggleSunshine}
         ></ToggleField>
       </PanelSectionRow>
-      {/* <NumpadInput value={pin} onChange={setPin} label="PIN"></NumpadInput>
-      <PanelSectionRow>
-        <ButtonItem onClick={() => sendPin()} disabled={pin.length < 4}>Send PIN</ButtonItem>
-      </PanelSectionRow>
-      <span>{JSON.stringify(resPin)}</span> */}
+      {sunshineIsAuthorized ? <div>
+        <NumpadInput value={localPin} onChange={setLocalPin} label="PIN"></NumpadInput>
+        <PanelSectionRow>
+          <ButtonItem onClick={() => sendPin()} disabled={localPin.length < 4}>Send PIN</ButtonItem>
+        </PanelSectionRow>
+      </div> : <div>
+        <PanelSectionRow>
+          <TextField label="Username" value={localUsername} onChange={(e) => setLocalUsername(e.target.value)}></TextField>
+          <TextField label="Password" value={localPassword} onChange={(e) => setLocalPassword(e.target.value)}></TextField>
+          <ButtonItem onClick={() => setAuthHeader()} disabled={localUsername.length < 1 || localPassword.length < 1}>Login</ButtonItem>
+        </PanelSectionRow>
+      </div>}
       {/* {sunshineIsEnabled &&
-        <ButtonItem onClick={() => Navigation.NavigateToExternalWeb("http://127.0.0.1:7777")}>Web UI</ButtonItem>} */}
+        <ButtonItem onClick={() => Navigation.NavigateToExternalWeb("https://127.0.0.1:47990")}>Web UI</ButtonItem>} */}
     </PanelSection>
 };
 
