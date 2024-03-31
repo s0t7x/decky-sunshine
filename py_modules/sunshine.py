@@ -76,11 +76,14 @@ class SunshineController:
         :param username: The username for authentication
         :param password: The password for authentication
         """
+        if (len(username) + len(password) < 1):
+            return ""
         credentials = f"{username}:{password}"
         base64_credentials = base64.b64encode(credentials.encode('utf-8'))
-        self.authHeader = f"Basic {base64_credentials.decode('utf-8')}"
+        auth_header = f"Basic {base64_credentials.decode('utf-8')}"
+        self.authHeader = auth_header
         self.needsAuth = False
-        return self.authHeader
+        return auth_header
 
     def __init__(self) -> None:
         """
