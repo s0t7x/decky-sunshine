@@ -7,7 +7,7 @@ import {
   staticClasses,
   ButtonItem,
   Spinner,
-  // Navigation,
+  Navigation,
   TextField,
 } from "decky-frontend-lib";
 import { VFC, useEffect, useState } from "react";
@@ -22,9 +22,6 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ serverAPI }) => {
 
   const [localPin, setLocalPin] = useState("");
 
-  const [localUsername, setLocalUsername] = useState("sunshine");
-  const [localPassword, setLocalPassword] = useState("");
-
   const sendPin = async () => {
     const result = await serverAPI.callPluginMethod<any, number>(
       "sendPin",
@@ -33,6 +30,7 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ serverAPI }) => {
       }
     );
     console.log("[SUN]", "sendPin result", result)
+    setLocalPin("")
   }
 
   const sunshineCheckRunning = async () => {
@@ -49,8 +47,21 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ serverAPI }) => {
     }
   };
 
+  const setAuthHeader = async () => {
+    const result = await serverAPI.callPluginMethod<any, boolean>(
+      "setAuthHeader",
+      {
+        username: JSON.parse(localStorage.getItem("decky_sunshine:localUsername") || ""),
+        password: JSON.parse(localStorage.getItem("decky_sunshine:localPassword") || "")
+      }
+    );
+    console.log("[SUN]", "setAuthHeader result", result)
+  }
+
   const sunshineCheckAuthorized = async () => {
-    const result = await serverAPI.callPluginMethod<any, number>(
+    if(!sunshineIsRunning) return
+    await setAuthHeader()
+    const result = await serverAPI.callPluginMethod<any, boolean>(
       "sunshineIsAuthorized",
       {
       }
@@ -63,18 +74,6 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ serverAPI }) => {
     }
   };
 
-  const setAuthHeader = async () => {
-    const result = await serverAPI.callPluginMethod<any, number>(
-      "setAuthHeader",
-      {
-        username: localUsername,
-        password: localPassword
-      }
-    );
-    console.log("[SUN]", "setAuthHeader result", result)
-    sunshineCheckAuthorized()
-  }
-
   useEffect(() => {
     setWantToggleSunshine(sunshineIsRunning)
     sunshineCheckAuthorized()
@@ -84,24 +83,25 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ serverAPI }) => {
     if (wantToggleSunshine != sunshineIsRunning) {
       if (wantToggleSunshine) {
         console.log("[SUN]", "should start")
-        serverAPI.callPluginMethod<any, number>(
+        serverAPI.callPluginMethod<any, any>(
           "sunshineStart",
           {
           }
-        );
+        ).then(res => console.log("[SUN]", res));
       } else {
         console.log("[SUN]", "should stop")
-        serverAPI.callPluginMethod<any, number>(
+        serverAPI.callPluginMethod<any, any>(
           "sunshineStop",
           {
           }
-        );
+        ).then(res => console.log("[SUN]", res));
       }
       window.setTimeout(() => sunshineCheckRunning(), 1000)
     }
   }, [wantToggleSunshine])
 
   sunshineCheckRunning()
+  sunshineCheckAuthorized()
 
   return (wantToggleSunshine != sunshineIsRunning) ? <Spinner></Spinner> :
     <PanelSection>
@@ -112,29 +112,70 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ serverAPI }) => {
           onChange={setWantToggleSunshine}
         ></ToggleField>
       </PanelSectionRow>
-      {sunshineIsAuthorized ? <div>
-        <NumpadInput value={localPin} onChange={setLocalPin} label="PIN"></NumpadInput>
+      {sunshineIsAuthorized ? (sunshineIsRunning && <div>
+        <NumpadInput value={localPin} key="pin" onChange={setLocalPin} label="PIN"></NumpadInput>
         <PanelSectionRow>
+          <div></div>
           <ButtonItem onClick={() => sendPin()} disabled={localPin.length < 4}>Send PIN</ButtonItem>
         </PanelSectionRow>
-      </div> : <div>
+      </div>) : (sunshineIsRunning &&
         <PanelSectionRow>
-          <TextField label="Username" value={localUsername} onChange={(e) => setLocalUsername(e.target.value)}></TextField>
-          <TextField label="Password" value={localPassword} onChange={(e) => setLocalPassword(e.target.value)}></TextField>
-          <ButtonItem onClick={() => setAuthHeader()} disabled={localUsername.length < 1 || localPassword.length < 1}>Login</ButtonItem>
+          <div></div>
+          <p>You need to log into web ui once</p>
+          <ButtonItem onClick={() => {
+            Navigation.CloseSideMenus();
+            Navigation.Navigate("/sunshine-login");
+          }}>Login</ButtonItem>
+
         </PanelSectionRow>
-      </div>}
+      )}
       {/* {sunshineIsEnabled &&
         <ButtonItem onClick={() => Navigation.NavigateToExternalWeb("https://127.0.0.1:47990")}>Web UI</ButtonItem>} */}
     </PanelSection>
 };
 
+const DeckySunshineLogin: VFC = () => {
+  let pun, ppw = undefined
+  try{
+    pun = JSON.parse(localStorage.getItem("decky_sunshine:localUsername") || "")
+    ppw = JSON.parse(localStorage.getItem("decky_sunshine:localPassword") || "")
+  } catch {
+
+  }
+
+  const [localUsername, setLocalUsername] = useState(pun || "sunshine");
+  const [localPassword, setLocalPassword] = useState(ppw || "");
+
+  const storeCreds = (): void => {
+    localStorage.setItem("decky_sunshine:localUsername", JSON.stringify(localUsername));
+    localStorage.setItem("decky_sunshine:localPassword", JSON.stringify(localPassword));
+  };
+
+  return (
+    <div style={{ marginTop: "50px", color: "white" }}>
+      <TextField label="Username" value={localUsername} onChange={(e) => setLocalUsername(e.target.value)}></TextField>
+      <TextField label="Password" bIsPassword={true} bAlwaysShowClearAction={true} value={[...localPassword].map((c) => '*').join('')} onChange={(e) => {
+        setLocalPassword(e.target.value);
+      }}></TextField>
+      <ButtonItem onClick={() => {
+        Navigation.NavigateBack();
+        storeCreds();
+      }} disabled={localUsername.length < 1 || localPassword.length < 1}>Login</ButtonItem>
+    </div>
+  );
+};
+
 export default definePlugin((serverApi: ServerAPI) => {
+  serverApi.routerHook.addRoute("/sunshine-login", DeckySunshineLogin, {
+    exact: true
+  });
+
   return {
     title: <div className={staticClasses.Title}>Decky Sunshine</div>,
     content: <Content serverAPI={serverApi} />,
     icon: <FaSun />,
     onDismount() {
+      serverApi.routerHook.removeRoute("/sunshine-login");
     },
   };
 });

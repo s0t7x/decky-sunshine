@@ -4,42 +4,48 @@ import os
 from sunshine import SunshineController
 
 class Plugin:
-    sunshineController = SunshineController()
+    sunshineController = None
         
-    async def _main(self):
-        decky_plugin.logger.info("Decky Sunshine loaded")
-
     async def sunshineIsRunning(self):
-        isRunning = sunshineController.isRunning()
+        isRunning = self.sunshineController.isRunning()
         decky_plugin.logger.info("Is Sunshine running: " + str(isRunning))
         return isRunning
     
     async def sunshineIsAuthorized(self):
-        isAuthorized = sunshineController.isAuthorized()
+        isAuthorized = self.sunshineController.isAuthorized()
         decky_plugin.logger.info("Is Decky Sunshine authorized: " + str(isAuthorized))
         return isAuthorized
     
     async def sunshineStart(self):
         decky_plugin.logger.info("Starting sunshine...")
-        res = sunshineController.start()
-        decky_plugin.logger.info("Sunshine " + (res and "NOT ") + "started")
+        res = self.sunshineController.start()
+        if res:
+            decky_plugin.logger.info("Sunshine started")
         return res
         
     async def sunshineStop(self):
         decky_plugin.logger.info("Stopping sunshine...")
-        sunshineController.stop()
+        self.sunshineController.stop()
         return True
     
     async def sendPin(self, pin):
-        decky_plugin.logger.info("Sending PIN...")
-        send = sunshineController.sendPin(pin)
-        decky_plugin.logger.info("PIN " + (send and "NOT ") + "send")
+        decky_plugin.logger.info("Sending PIN..." + pin)
+        send = self.sunshineController.sendPin(pin)
+        decky_plugin.logger.info("PIN send " + str(send))
         return send
     
     async def setAuthHeader(self, username, password):
-        decky_plugin.logger.info("Sending PIN...")
-        sunshineController.setAuthHeader(username, password)
-        decky_plugin.logger.info("AuthHeader set")
+        if len(username) + len(password) < 1:
+            decky_plugin.logger.info("No AuthHeader to set")
+            return
+        decky_plugin.logger.info("Set AuthHeader...")
+        res = self.sunshineController.setAuthHeader(username, password)
+        decky_plugin.logger.info("AuthHeader set " + res)
+
+    async def _main(self):
+        if self.sunshineController is None:
+            self.sunshineController = SunshineController()
+        decky_plugin.logger.info("Decky Sunshine loaded")
 
     async def _unload(self):
         decky_plugin.logger.info("Decky Sunshine unloaded")
