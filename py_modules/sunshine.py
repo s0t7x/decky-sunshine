@@ -192,3 +192,44 @@ class SunshineController:
             except:
                 return False
         return False
+    
+    def isInstalled(self) -> bool:
+        # flatpak list --system | grep Sunshine
+        try:
+            child = subprocess.Popen(["flatpak", "list", "--system"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            response, _ = child.communicate()
+            response = response.decode("utf-8")  # Decode the bytes output to a string
+            for app in response.split("\n"):
+                if "Sunshine" in app:
+                    return True
+        except:
+            return False
+        return False
+        
+    def install(self) -> bool:
+        try:
+            child = subprocess.Popen(["flatpak", "install", "--system", "-y", "dev.lizardbyte.app.Sunshine"],
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout, stderr = child.communicate()
+
+            if child.returncode != 0:
+                return False
+            
+            return True
+
+        except Exception as e:
+            return False
+        
+    def setUser(self, newUsername, newPassword, confirmNewPassword, currentUsername = None, currentPassword = None) -> bool:
+        data =  { "newUsername": newUsername, "newPassword": newPassword, "confirmNewPassword": confirmNewPassword }
+        if(currentUsername or currentPassword):
+            data += { "currentUsername": currentUsername, "currentPassword": currentPassword }
+        res = self.request("/api/password", "POST", data)
+        if len(res) > 0:
+            try:
+                data = json.loads(res)
+                if data["status"] == "true":
+                    return True
+            except:
+                return False
+        return False
