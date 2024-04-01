@@ -5,6 +5,7 @@ from sunshine import SunshineController
 
 class Plugin:
     sunshineController = None
+    freshInstallation = False
         
     async def sunshineIsRunning(self):
         isRunning = self.sunshineController.isRunning()
@@ -28,6 +29,13 @@ class Plugin:
         self.sunshineController.stop()
         return True
     
+    async def sunshineIsFreshInstallation(self):
+        return self.freshInstallation
+    
+    async def sunshineSetUser(self, newUsername, newPassword, confirmNewPassword, currentUsername = None, currentPassword = None):
+        # TODO: implement
+        pass
+    
     async def sendPin(self, pin):
         decky_plugin.logger.info("Sending PIN..." + pin)
         send = self.sunshineController.sendPin(pin)
@@ -46,7 +54,16 @@ class Plugin:
         if self.sunshineController is None:
             self.sunshineController = SunshineController()
         if not self.sunshineController.isInstalled():
-            self.sunshineController.install()
+            decky_plugin.logger.info("Sunshine is not installed. Installing...")
+            installed = self.sunshineController.install()
+            if installed:
+                self.freshInstallation = True
+                decky_plugin.logger.info("Sunshine installed")
+                self.sunshineController.start()
+                self.sunshineController.setUser("decky_sunshine", "decky_sunshine", "decky_sunshine")
+                self.sunshineController.setAuthHeader("decky_sunshine", "decky_sunshine")
+        else:
+            decky_plugin.logger.info("Sunshine is installed")
         decky_plugin.logger.info("Decky Sunshine loaded")
 
     async def _unload(self):
