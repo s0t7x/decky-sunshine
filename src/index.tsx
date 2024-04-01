@@ -19,7 +19,6 @@ import { PINInput } from "./components/PINInput";
 const Content: VFC<{ serverAPI: ServerAPI }> = ({ serverAPI }) => {
   const [sunshineIsRunning, setSunshineIsRunning] = useState<boolean>(false);
   const [sunshineIsAuthorized, setSunshineIsAuthorized] = useState<boolean>(false);
-  const [sunshineFreshInstall, setSunshineFreshInstall] = useState<boolean>(false);
 
   const [wantToggleSunshine, setWantToggleSunshine] = useState<boolean>(false);
 
@@ -80,23 +79,7 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ serverAPI }) => {
     }
   };
 
-  const sunshineCheckFreshInstall = async () => {
-    if (!sunshineIsRunning) return
-    const result = await serverAPI.callPluginMethod<any, boolean>(
-      "sunshineIsFreshInstallation",
-      {
-      }
-    );
-    console.log("[SUN]", "sunshineCheckFreshInstall result", result)
-    if (result.success) {
-      setSunshineFreshInstall(Boolean(result.result));
-    } else {
-      setSunshineFreshInstall(false);
-    }
-  };
-
   useEffect(() => {
-    sunshineCheckFreshInstall()
     setWantToggleSunshine(sunshineIsRunning)
     sunshineCheckAuthorized()
   }, [sunshineIsRunning])
@@ -122,9 +105,10 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ serverAPI }) => {
     }
   }, [wantToggleSunshine])
 
-  sunshineCheckFreshInstall()
-  sunshineCheckRunning()
-  sunshineCheckAuthorized()
+  ;(async () => {
+    await sunshineCheckRunning()
+    await sunshineCheckAuthorized()
+  })()
 
   return (wantToggleSunshine != sunshineIsRunning) ? <Spinner></Spinner> :
     <PanelSection>
