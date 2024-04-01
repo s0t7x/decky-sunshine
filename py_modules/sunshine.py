@@ -1,10 +1,11 @@
 import subprocess
 import os
 import signal
-from urllib.request import urlopen, Request
 import base64
 import json
 import ssl
+
+from urllib.request import urlopen, Request
 
 def find_process_ids_by_name(name):
     """
@@ -43,6 +44,8 @@ class SunshineController:
     
     needsAuth = True
     authHeader = ""
+    
+    sunshineBaseUrl = "https://127.0.0.1:47990"
 
     def killShell(self) -> None:
         """
@@ -101,32 +104,38 @@ class SunshineController:
         :param data: The request data (optional)
         :return: The response data as a string
         """
-        url = "https://localhost:47990" + path
+        url = self.sunshineBaseUrl + path
         try:
             request = Request(url, data=data, method=method)
+            request.add_header("User-Agent", "decky-sunshine")
+            request.add_header("Connection", "keep-alive")
+            request.add_header("Accept", "application/json, */*; q=0.01")
             request.add_header("Authorization", self.authHeader)
             if method == "POST":
                 request.add_header("Content-Type", "application/json")
                 request.data = json.dumps(data).encode('utf-8')
             with urlopen(request, context=self.sslContext) as response:
                 json_response = response.read().decode()
+                response.close()
                 return str(json_response)
         except:
             return ""
         
-    def requestDbg(self, path, method, data=None) -> str:
-        url = "https://localhost:47990" + path
+    def requestRaw(self, path, method, data=None) -> str:
+        url = self.sunshineBaseUrl + path
         try:
-            request = Request(url, data=data, method=method)
-            # request.add_header("Authorization", self.authHeader)
-            request.add_header("Authorization", "Basic c3Vuc2hpbmU6ZnJpc2NobWlsY2glMQ==")
+            request = Request(url, data=None, method=method, unverifiable=True)
+            request.add_header("User-Agent", "decky-sunshine")
+            request.add_header("Connection", "keep-alive")
+            request.add_header("Accept", "application/json, */*; q=0.01")
+            request.add_header("Authorization", self.authHeader)
             if method == "POST":
                 request.add_header("Content-Type", "application/json")
                 request.data = json.dumps(data).encode('utf-8')
-            with urlopen(request, context=self.sslContext) as response:
-                return response
+            response = urlopen(request, context=self.sslContext)
+            return response
         except Exception as e:
-            return e
+            return None
 
     def isRunning(self) -> bool:
         """
@@ -140,8 +149,11 @@ class SunshineController:
         Check if the controller is authorized to access the Sunshine server.
         :return: True if authorized, False otherwise
         """
-        res = self.request("/api/apps", "GET")
-        return len(res) > 0
+        res = self.requestRaw("/api/apps", "GET")
+        if(res):
+            res.close()
+            return res.status == 200
+        return False
 
     def start(self) -> bool:
         """
@@ -179,4 +191,4 @@ class SunshineController:
                     return True
             except:
                 return False
-        return res
+        return False

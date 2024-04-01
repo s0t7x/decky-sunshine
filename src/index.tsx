@@ -12,7 +12,8 @@ import {
 } from "decky-frontend-lib";
 import { VFC, useEffect, useState } from "react";
 import { FaSun } from "react-icons/fa";
-import { NumpadInput } from "./components/NumpadInput";
+
+import { PINInput } from "./components/PINInput";
 
 const Content: VFC<{ serverAPI: ServerAPI }> = ({ serverAPI }) => {
   const [sunshineIsRunning, setSunshineIsRunning] = useState<boolean>(false);
@@ -23,7 +24,7 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ serverAPI }) => {
   const [localPin, setLocalPin] = useState("");
 
   const sendPin = async () => {
-    const result = await serverAPI.callPluginMethod<any, number>(
+    const result = await serverAPI.callPluginMethod<{ pin: string }, boolean>(
       "sendPin",
       {
         pin: localPin
@@ -34,7 +35,7 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ serverAPI }) => {
   }
 
   const sunshineCheckRunning = async () => {
-    const result = await serverAPI.callPluginMethod<any, number>(
+    const result = await serverAPI.callPluginMethod<any, boolean>(
       "sunshineIsRunning",
       {
       }
@@ -59,7 +60,7 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ serverAPI }) => {
   }
 
   const sunshineCheckAuthorized = async () => {
-    if(!sunshineIsRunning) return
+    if (!sunshineIsRunning) return
     await setAuthHeader()
     const result = await serverAPI.callPluginMethod<any, boolean>(
       "sunshineIsAuthorized",
@@ -112,15 +113,10 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ serverAPI }) => {
           onChange={setWantToggleSunshine}
         ></ToggleField>
       </PanelSectionRow>
-      {sunshineIsAuthorized ? (sunshineIsRunning && <div>
-        <NumpadInput value={localPin} key="pin" onChange={setLocalPin} label="PIN"></NumpadInput>
+      {sunshineIsAuthorized ? (sunshineIsRunning &&
+        <PINInput value={localPin} key="pin" onChange={setLocalPin} label="Enter PIN" onSend={sendPin} sendLabel="Pair"></PINInput>
+      ) : (sunshineIsRunning &&
         <PanelSectionRow>
-          <div></div>
-          <ButtonItem onClick={() => sendPin()} disabled={localPin.length < 4}>Send PIN</ButtonItem>
-        </PanelSectionRow>
-      </div>) : (sunshineIsRunning &&
-        <PanelSectionRow>
-          <div></div>
           <p>You need to log into web ui once</p>
           <ButtonItem onClick={() => {
             Navigation.CloseSideMenus();
@@ -136,7 +132,7 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ serverAPI }) => {
 
 const DeckySunshineLogin: VFC = () => {
   let pun, ppw = undefined
-  try{
+  try {
     pun = JSON.parse(localStorage.getItem("decky_sunshine:localUsername") || "")
     ppw = JSON.parse(localStorage.getItem("decky_sunshine:localPassword") || "")
   } catch {
@@ -154,7 +150,7 @@ const DeckySunshineLogin: VFC = () => {
   return (
     <div style={{ marginTop: "50px", color: "white" }}>
       <TextField label="Username" value={localUsername} onChange={(e) => setLocalUsername(e.target.value)}></TextField>
-      <TextField label="Password" bIsPassword={true} bAlwaysShowClearAction={true} value={[...localPassword].map((c) => '*').join('')} onChange={(e) => {
+      <TextField label="Password" bIsPassword={true} bAlwaysShowClearAction={true} value={localPassword} onChange={(e) => {
         setLocalPassword(e.target.value);
       }}></TextField>
       <ButtonItem onClick={() => {
