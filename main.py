@@ -45,6 +45,8 @@ class Plugin:
     async def _main(self):
         if self.sunshineController is None:
             self.sunshineController = SunshineController()
+        if not self.sunshineController.isInstalled():
+            self.sunshineController.install()
         decky_plugin.logger.info("Decky Sunshine loaded")
 
     async def _unload(self):
@@ -52,8 +54,6 @@ class Plugin:
         pass
 
     async def _migration(self):
-        # TODO: check if installed or install sunshine ? :)
-
         # - `~/homebrew/settings/sunshine.json` is migrated to `decky_plugin.DECKY_PLUGIN_SETTINGS_DIR/sunshine.json`
         # - `~/.config/decky-sunshine/` all files and directories under this root are migrated to `decky_plugin.DECKY_PLUGIN_SETTINGS_DIR/`
         decky_plugin.migrate_settings(
