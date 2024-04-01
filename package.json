@@ -1,29 +1,13 @@
 {
-  "name": "decky-plugin-template",
-  "version": "0.0.1",
-  "description": "A template to quickly create decky plugins from scratch, based on TypeScript and webpack",
+  "name": "decky-sunshine",
+  "version": "0.1.1",
+  "description": "Decky plugin to easily use Sunshine streaming in Game Mode",
   "scripts": {
     "build": "shx rm -rf dist && rollup -c",
     "watch": "rollup -c -w",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/SteamDeckHomebrew/decky-plugin-template.git"
-  },
-  "keywords": [
-    "decky",
-    "plugin",
-    "plugin-template",
-    "steam-deck",
-    "deck"
-  ],
-  "author": "Jonas Dellinger <jonas@dellinger.dev>",
-  "license": "BSD-3-Clause",
-  "bugs": {
-    "url": "https://github.com/SteamDeckHomebrew/decky-plugin-template/issues"
-  },
-  "homepage": "https://github.com/SteamDeckHomebrew/decky-plugin-template#readme",
+  "author": "s0t7x",
   "devDependencies": {
     "@rollup/plugin-commonjs": "^21.1.0",
     "@rollup/plugin-json": "^4.1.0",

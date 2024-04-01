@@ -1,10 +1,10 @@
 {
   "name": "Decky Sunshine",
-  "author": "Miguel Oppermann",
-  "flags": ["debug", "_root", "root"],
+  "author": "s0t7x",
+  "flags": ["debug", "root"],
   "publish": {
     "tags": ["root"],
-    "description": "Decky plugin to toggle Sunshine server in game mode.",
+    "description": "Decky plugin to simply integrate Sunshine server into game mode.",
     "image": "https://opengraph.githubassets.com/1/SteamDeckHomebrew/PluginLoader"
   }
 }
