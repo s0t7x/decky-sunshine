@@ -4,7 +4,7 @@
   "flags": ["root"],
   "publish": {
     "tags": ["root", "streaming", "moonlight"],
-    "description": "Decky plugin to simply integrate Sunshine server into game mode.",
-    "image": "https://opengraph.githubassets.com/1/SteamDeckHomebrew/PluginLoader"
+    "description": "Decky plugin to integrate Sunshine server into game mode.",
+    "image": "https://opengraph.githubassets.com/1/s0t7x/decky-sunshine"
   }
 }

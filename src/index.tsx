@@ -17,7 +17,11 @@ import backend from "./util/backend";
 
 import { PINInput } from "./components/PINInput";
 
+const __unused = (v: any) => v
+
 const Content: VFC<{ serverAPI: ServerAPI }> = ({ serverAPI }) => {
+  __unused(serverAPI)
+
   const [sunshineIsRunning, setSunshineIsRunning] = useState<boolean>(false);
   const [sunshineIsAuthorized, setSunshineIsAuthorized] = useState<boolean>(false);
 
