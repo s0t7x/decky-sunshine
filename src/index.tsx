@@ -31,9 +31,10 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ serverAPI }) => {
     const authed = await backend.sunshineIsAuthorized()
     setSunshineIsAuthorized(authed)
   }
-  
+
   useEffect(() => {
-    setWantToggleSunshine(sunshineIsRunning)
+    if (wantToggleSunshine != sunshineIsRunning)
+      setWantToggleSunshine(sunshineIsRunning)
   }, [sunshineIsRunning])
 
   useEffect(() => {
@@ -47,9 +48,7 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ serverAPI }) => {
     }
   }, [wantToggleSunshine])
 
-    ; (async () => {
-      await updateSunshineState()
-    })()
+  updateSunshineState()
 
   return (wantToggleSunshine != sunshineIsRunning) ? <Spinner></Spinner> :
     <PanelSection>
