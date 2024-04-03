@@ -16,6 +16,8 @@
 
 Decky Sunshine is the perfect solution for capturing your Steam Deck gameplay. With this plugin, you can easily toggle the Sunshine game streaming server and pair new devices, allowing you to share your gaming experiences with the world seamlessly.
 
+[Getting Started with Decky Sunshine](https://github.com/s0t7x/decky-sunshine/blob/main/docs/getting_started.md)
+
 [What exaclty does all of this mean?](https://github.com/s0t7x/decky-sunshine/blob/main/docs/about.md)
 
 [How do I stream my SteamDeck to Twitch using my PC?](https://github.com/s0t7x/decky-sunshine/blob/main/docs/platform_streaming.md)
