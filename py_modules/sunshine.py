@@ -84,9 +84,12 @@ class SunshineController:
         credentials = f"{username}:{password}"
         base64_credentials = base64.b64encode(credentials.encode('utf-8'))
         auth_header = f"Basic {base64_credentials.decode('utf-8')}"
-        self.authHeader = auth_header
+        return self.setAuthHeaderRaw(auth_header)
+    
+    def setAuthHeaderRaw(self, authHeader):
+        self.authHeader = str(authHeader)
         self.needsAuth = False
-        return auth_header
+        return self.authHeader
 
     def __init__(self) -> None:
         """
@@ -163,7 +166,9 @@ class SunshineController:
         if self.isRunning():
             return False
         try:
-            self.shellHandle = subprocess.Popen("PULSE_SERVER=unix:$(pactl info | awk '/Server String/{print$3}') sh -c 'flatpak run dev.lizardbyte.app.Sunshine -0'", user=0, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, preexec_fn=os.setsid)
+            my_env = os.environ.copy()
+            my_env["PULSE_SERVER"] = "unix:/run/user/1000/pulse/native"
+            self.shellHandle = subprocess.Popen("sh -c 'flatpak run --socket=wayland dev.lizardbyte.app.Sunshine'", env=my_env, user=0, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, preexec_fn=os.setsid)
         except Exception as e:
             print(f"An error occurred while starting Sunshine: {e}")
             self.shellHandle = None

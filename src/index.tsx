@@ -13,6 +13,7 @@ import {
 } from "decky-frontend-lib";
 import { VFC, useEffect, useState } from "react";
 import { FaSun } from "react-icons/fa";
+import backend from "./util/backend";
 
 import { PINInput } from "./components/PINInput";
 
@@ -24,91 +25,30 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ serverAPI }) => {
 
   const [localPin, setLocalPin] = useState("");
 
-  const sendPin = async () => {
-    const result = await serverAPI.callPluginMethod<{ pin: string }, boolean>(
-      "sendPin",
-      {
-        pin: localPin
-      }
-    );
-    console.log("[SUN]", "sendPin result", result)
-    setLocalPin("")
+  const updateSunshineState = async () => {
+    const running = await backend.sunshineIsRunning()
+    setSunshineIsRunning(running)
+    const authed = await backend.sunshineIsAuthorized()
+    setSunshineIsAuthorized(authed)
   }
-
-  const sunshineCheckRunning = async () => {
-    const result = await serverAPI.callPluginMethod<any, boolean>(
-      "sunshineIsRunning",
-      {
-      }
-    );
-    console.log("[SUN]", "sunshineCheckRunning result", result)
-    if (result.success) {
-      setSunshineIsRunning(Boolean(result.result));
-    } else {
-      setSunshineIsRunning(false);
-    }
-  };
-
-  const setAuthHeader = async () => {
-    const changed = localStorage.getItem("decky_sunshine:localChanged")
-    if(!changed) return
-    localStorage.setItem("decky_sunshine:localChanged", JSON.stringify(false));
-    const result = await serverAPI.callPluginMethod<any, boolean>(
-      "setAuthHeader",
-      {
-        username: JSON.parse(localStorage.getItem("decky_sunshine:localUsername") || "decky_sunshine"),
-        password: JSON.parse(localStorage.getItem("decky_sunshine:localPassword") || "decky_sunshine")
-      }
-    );
-    console.log("[SUN]", "setAuthHeader result", result)
-  }
-
-  const sunshineCheckAuthorized = async () => {
-    if (!sunshineIsRunning) return
-    await setAuthHeader()
-    const result = await serverAPI.callPluginMethod<any, boolean>(
-      "sunshineIsAuthorized",
-      {
-      }
-    );
-    console.log("[SUN]", "sunshineCheckAuthorized result", result)
-    if (result.success) {
-      setSunshineIsAuthorized(Boolean(result.result));
-    } else {
-      setSunshineIsAuthorized(false);
-    }
-  };
 
   useEffect(() => {
-    setWantToggleSunshine(sunshineIsRunning)
-    sunshineCheckAuthorized()
+    if (wantToggleSunshine != sunshineIsRunning)
+      setWantToggleSunshine(sunshineIsRunning)
   }, [sunshineIsRunning])
 
   useEffect(() => {
     if (wantToggleSunshine != sunshineIsRunning) {
       if (wantToggleSunshine) {
-        console.log("[SUN]", "should start")
-        serverAPI.callPluginMethod<any, any>(
-          "sunshineStart",
-          {
-          }
-        ).then(res => console.log("[SUN] start res: ", res));
+        backend.sunshineStart()
       } else {
-        console.log("[SUN]", "should stop")
-        serverAPI.callPluginMethod<any, any>(
-          "sunshineStop",
-          {
-          }
-        ).then(res => console.log("[SUN] stop res: ", res));
+        backend.sunshineStop()
       }
-      window.setTimeout(() => sunshineCheckRunning(), 1000)
+      window.setTimeout(() => updateSunshineState(), 1000)
     }
   }, [wantToggleSunshine])
 
-  ;(async () => {
-    await sunshineCheckRunning()
-    await sunshineCheckAuthorized()
-  })()
+  updateSunshineState()
 
   return (wantToggleSunshine != sunshineIsRunning) ? <Spinner></Spinner> :
     <PanelSection>
@@ -120,7 +60,7 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ serverAPI }) => {
         ></ToggleField>
       </PanelSectionRow>
       {sunshineIsAuthorized ? (sunshineIsRunning &&
-        <PINInput value={localPin} key="pin" onChange={setLocalPin} label="Enter PIN" onSend={sendPin} sendLabel="Pair"></PINInput>
+        <PINInput value={localPin} key="pin" onChange={setLocalPin} label="Enter PIN" onSend={() => { backend.sunshineSendPin(localPin); setLocalPin("") }} sendLabel="Pair"></PINInput>
       ) : (sunshineIsRunning &&
         <PanelSectionRow>
           <p>You need to log into web ui once</p>
@@ -135,22 +75,15 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ serverAPI }) => {
 };
 
 const DeckySunshineLogin: VFC = () => {
-  let pun, ppw = undefined
+  let pun = undefined
   try {
     pun = JSON.parse(localStorage.getItem("decky_sunshine:localUsername") || "decky_sunshine")
-    ppw = ""
   } catch {
-
+    pun = "decky_sunshine"
   }
 
-  const [localUsername, setLocalUsername] = useState(pun || "decky_sunshine");
-  const [localPassword, setLocalPassword] = useState(ppw || "");
-
-  const storeCreds = (): void => {
-    localStorage.setItem("decky_sunshine:localUsername", JSON.stringify(localUsername));
-    localStorage.setItem("decky_sunshine:localPassword", JSON.stringify(localPassword));
-    localStorage.setItem("decky_sunshine:localChanged", JSON.stringify(true));
-  };
+  const [localUsername, setLocalUsername] = useState(pun);
+  const [localPassword, setLocalPassword] = useState("");
 
   return (
     <div style={{ marginTop: "50px", color: "white" }}>
@@ -159,8 +92,9 @@ const DeckySunshineLogin: VFC = () => {
         setLocalPassword(e.target.value);
       }}></TextField>
       <ButtonItem onClick={() => {
+        localStorage.setItem("decky_sunshine:localUsername", localUsername)
         Navigation.NavigateBack();
-        storeCreds();
+        backend.sunshineSetAuthHeader(localUsername, localPassword)
         Navigation.OpenQuickAccessMenu(QuickAccessTab.Decky)
       }} disabled={localUsername.length < 1 || localPassword.length < 1}>Login</ButtonItem>
     </div>
@@ -174,16 +108,6 @@ const DeckySunshineSetUser: VFC = () => {
   const [newPassword, setNewPassword] = useState("")
   const [confirmNewPassword, setConfirmNewPassword] = useState("")
 
-
-  const storeCreds = (): void => {
-    localStorage.setItem("decky_sunshine:setUserData", JSON.stringify(
-      {
-        currentUsername, currentPassword,
-        newUsername, newPassword, confirmNewPassword
-      }
-    ));
-  };
-
   return (
     <div style={{ marginTop: "50px", color: "white" }}>
       <TextField label="currentUsername" value={currentUsername} onChange={(e) => setCurrentUsername(e.target.value)}></TextField>
@@ -194,7 +118,7 @@ const DeckySunshineSetUser: VFC = () => {
 
       <ButtonItem onClick={() => {
         Navigation.NavigateBack();
-        storeCreds();
+        backend.sunshineSetUser(newUsername, newPassword, confirmNewPassword, currentUsername, currentPassword);
         Navigation.OpenQuickAccessMenu(QuickAccessTab.Decky)
       }} disabled={
         currentUsername.length < 1 ||
@@ -214,6 +138,8 @@ export default definePlugin((serverApi: ServerAPI) => {
   serverApi.routerHook.addRoute("/sunshine-set-user", DeckySunshineSetUser, {
     exact: true
   });
+
+  backend.serverAPI = serverApi
 
   return {
     title: <div className={staticClasses.Title}>Decky Sunshine</div>,

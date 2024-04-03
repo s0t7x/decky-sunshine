@@ -1,11 +1,20 @@
 import decky_plugin
 import os
+from pathlib import Path
 
+from settings import SettingsManager
 from sunshine import SunshineController
 
 class Plugin:
     sunshineController = None
+    settingManager = None
     freshInstallation = False
+    
+    async def set_setting(self, key, value):
+        return self.settingManager.setSetting(key, value)
+
+    async def get_setting(self, key, default):
+        return self.settingManager.getSetting(key, default)
         
     async def sunshineIsRunning(self):
         isRunning = self.sunshineController.isRunning()
@@ -33,8 +42,10 @@ class Plugin:
         return self.freshInstallation
     
     async def sunshineSetUser(self, newUsername, newPassword, confirmNewPassword, currentUsername = None, currentPassword = None):
-        # TODO: implement
-        pass
+        decky_plugin.logger.info("Set Sunshine User...")
+        result = self.sunshineController.setUser(newUsername, newPassword, confirmNewPassword, currentUsername, currentPassword)
+        decky_plugin.logger.info("User changed: " + str(result))
+        return result
     
     async def sendPin(self, pin):
         decky_plugin.logger.info("Sending PIN..." + pin)
@@ -48,11 +59,17 @@ class Plugin:
             return
         decky_plugin.logger.info("Set AuthHeader...")
         res = self.sunshineController.setAuthHeader(username, password)
+        self.settingManager.setSetting("lastAuthHeader", str(res))
         decky_plugin.logger.info("AuthHeader set " + res)
 
     async def _main(self):
         if self.sunshineController is None:
             self.sunshineController = SunshineController()
+        if self.settingManager is None:
+            decky_plugin.logger.info("Reading settings...")
+            self.settingManager = SettingsManager(name = "decky-sunshine", settings_directory=os.environ["DECKY_PLUGIN_SETTINGS_DIR"])
+            self.settingManager.read()
+            decky_plugin.logger.info(str(self.settingManager))
         if not self.sunshineController.isInstalled():
             decky_plugin.logger.info("Sunshine is not installed. Installing...")
             installed = self.sunshineController.install()
@@ -63,16 +80,15 @@ class Plugin:
                 self.sunshineController.setUser("decky_sunshine", "decky_sunshine", "decky_sunshine")
                 self.sunshineController.setAuthHeader("decky_sunshine", "decky_sunshine")
         else:
+            lastAuthHeader = self.settingManager.getSetting("lastAuthHeader", "")
+            decky_plugin.logger.info("lastAuthHeader: " + str(lastAuthHeader))
+            if(len(lastAuthHeader) > 0):
+                self.sunshineController.setAuthHeaderRaw(lastAuthHeader)
             decky_plugin.logger.info("Sunshine is installed")
         decky_plugin.logger.info("Decky Sunshine loaded")
 
     async def _unload(self):
         decky_plugin.logger.info("Decky Sunshine unloaded")
-        pass
 
     async def _migration(self):
-        # - `~/homebrew/settings/sunshine.json` is migrated to `decky_plugin.DECKY_PLUGIN_SETTINGS_DIR/sunshine.json`
-        # - `~/.config/decky-sunshine/` all files and directories under this root are migrated to `decky_plugin.DECKY_PLUGIN_SETTINGS_DIR/`
-        decky_plugin.migrate_settings(
-            os.path.join(decky_plugin.DECKY_HOME, "settings", "sunshine.json"),
-            os.path.join(decky_plugin.DECKY_USER_HOME, ".config", "decky-sunshine"))
+        decky_plugin.migrate_settings(str(Path(decky_plugin.DECKY_HOME) / "settings" / "decky-sunshine.json"))
