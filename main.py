@@ -33,8 +33,10 @@ class Plugin:
         return self.freshInstallation
     
     async def sunshineSetUser(self, newUsername, newPassword, confirmNewPassword, currentUsername = None, currentPassword = None):
-        # TODO: implement
-        pass
+        decky_plugin.logger.info("Set Sunshine User...")
+        result = self.sunshineController.setUser(newUsername, newPassword, confirmNewPassword, currentUsername, currentPassword)
+        decky_plugin.logger.info("User changed: " + str(result))
+        return result
     
     async def sendPin(self, pin):
         decky_plugin.logger.info("Sending PIN..." + pin)
