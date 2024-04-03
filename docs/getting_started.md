@@ -5,7 +5,7 @@ This guide will walk you through the steps to stream your Steam Deck gameplay to
 
 ## Installing Decky
 
-1. Access the Decky website (https://decky.xyz) from your Steam Deck and download the installer.
+1. Access the [Decky website](https://decky.xyz) from your Steam Deck and download the installer.
 2. If your browser cannot run files, open the downloaded installer from the Dolphin file manager.
 
 ## Installing Decky Sunshine Plugin
@@ -35,4 +35,4 @@ This guide will walk you through the steps to stream your Steam Deck gameplay to
 6. Once paired, the Moonlight Client will connect to the Sunshine server and stream your Steam Deck.
 
 With these steps, you should now be able to stream your Steam Deck gameplay to your PC.
-(You may also want to pass what you see to platforms like Twitch.)[https://github.com/s0t7x/decky-sunshine/blob/main/docs/platform_streaming.md]
+[You may also want to pass what you see to platforms like Twitch.](https://github.com/s0t7x/decky-sunshine/blob/main/docs/platform_streaming.md)
