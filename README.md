@@ -3,10 +3,7 @@
   <h1>Decky Sunshine Plugin</h1>
   <p>
     <a href="https://github.com/s0t7x/decky-sunshine/releases/latest" target="_blank">
-      <img src="https://img.shields.io/github/v/release/s0t7x/decky-sunshine?style=flat-square&include_prereleases&logo=github" alt="Release" />
-    </a>
-    <a href="https://github.com/s0t7x/decky-sunshine/blob/main/LICENSE" target="_blank">
-      <img src="https://img.shields.io/github/license/s0t7x/decky-sunshine?style=flat-square" alt="License" />
+      <img src="https://img.shields.io/github/v/release/s0t7x/decky-sunshine?style=flat-square&include_prereleases&logo=github&_=0" alt="Release" />
     </a>
     <a href="https://github.com/s0t7x/decky-sunshine/issues" target="_blank">
       <img src="https://img.shields.io/github/issues/s0t7x/decky-sunshine?style=flat-square" alt="Issues" />
