@@ -1,42 +1,57 @@
-# Decky Sunshine Plugin
+<div align="center">
+  <img height="300px" width="auto" src="https://github.com/s0t7x/decky-sunshine/assets/11461553/bb174ec3-b6d4-499b-8eeb-43a0664b3f47" alt="Decky Sunshine Logo" />
+  <h1>Decky Sunshine Plugin</h1>
+  <p>
+    <a href="https://github.com/s0t7x/decky-sunshine/releases/latest" target="_blank">
+      <img src="https://img.shields.io/github/v/release/s0t7x/decky-sunshine?style=flat-square&include_prereleases&logo=github" alt="Release" />
+    </a>
+    <a href="https://github.com/s0t7x/decky-sunshine/blob/main/LICENSE" target="_blank">
+      <img src="https://img.shields.io/github/license/s0t7x/decky-sunshine?style=flat-square" alt="License" />
+    </a>
+    <a href="https://github.com/s0t7x/decky-sunshine/issues" target="_blank">
+      <img src="https://img.shields.io/github/issues/s0t7x/decky-sunshine?style=flat-square" alt="Issues" />
+    </a>
+  </p>
+</div>
 
-<img height="300" width="auto" style="height:200px" src="https://github.com/s0t7x/decky-sunshine/assets/11461553/bb174ec3-b6d4-499b-8eeb-43a0664b3f47" />
-
-## Overview
-
-Decky Sunshine is a plugin, allowing to easily toggle the Sunshine game streaming server when in game mode. This plugin simplifies the process of enabling or disabling the Sunshine server directly from the sidebar, providing a seamless gaming experience.
+Decky Sunshine is the perfect solution for capturing your Steam Deck gameplay. With this powerful plugin, you can easily toggle the Sunshine game streaming server and pair new devices, allowing you to share your gaming experiences with the world seamlessly.
 
 ## Features
 
 - Toggle the Sunshine game streaming server on/off directly from Decky's interface.
-- Automatic installation and setup if sunshine is not already installed
-- Stream games from your Deck to other devices over a local network or the internet.
+- Automatic installation and setup if Sunshine is not already installed.
+- Stream games from your Steam Deck to other devices over a local network.
 
 ## Installation
-~~1. Go into to Desktop Mode~~
 
-~~2. Make sure Sunshine Flatpak is installed~~
-
-~~3. Configure Sunshine and pair your devices~~
-
-1. Download the latest ZIP from [releases](https://github.com/s0t7x/decky-sunshine/tags)
-
+1. Download the latest ZIP from [releases](https://github.com/s0t7x/decky-sunshine/releases/latest).
 2. Enable the plugin in Decky:
    - Open Decky settings.
-   - Activate Developer settings
-   - Navigate to Developer tab and press 'install from zip'.
-   - Find the "Decky Sunshine.zip" and install it.
+   - Activate Developer settings.
+   - Navigate to the Developer tab and press 'Install from ZIP'.
+   - Find the "Decky.Sunshine.zip" file and install it.
 
 ## Usage
+
 1. Use the toggle button to enable or disable the Sunshine server as needed.
-2. Enter PIN to pair new devices when they ask you for
+2. Enter the PIN to pair new devices when prompted.
 3. Enjoy streaming games seamlessly with Sunshine during your gaming sessions.
+
+When sunshine was already installed a sunshine user may already have been set.
+Decky Sunshine will ask for the credentials once it can't authenticate.
 
 ## Contributing
 
-Contributions to the Decky Sunshine are welcome! If you have any ideas for improvements, bug fixes, or new features, feel free to open an issue or submit a pull request.
+Contributions to the Decky Sunshine project are welcome! If you have any ideas for improvements, bug fixes, or new features, feel free to open an issue or submit a pull request.
 
 ## Acknowledgements
 
-- Thanks to Decky!
-- Special thanks to the developers of Sunshine for creating the game streaming server.
+Thanks to [Decky Plugin Loader](https://decky.xyz/) for being amazing.
+
+Thanks to [CameronRedmore/memory-deck](https://github.com/CameronRedmore/memory-deck) for the work on `NumpadInput` which was adapted for `PinInput`.
+
+Special thanks to the developers of Sunshine for creating the game streaming server.
+
+## License
+
+This project is licensed under the [GNU GPLv3 License](https://github.com/s0t7x/decky-sunshine/blob/main/LICENSE).
