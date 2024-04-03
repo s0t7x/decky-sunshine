@@ -18,7 +18,7 @@ class Backend {
             {}
         );
         console.log("[SUN]", "sunshineCheckRunning result", result)
-        if (result?.success) {
+        if (result?.result) {
             return true
         } else {
             return false

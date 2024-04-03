@@ -31,7 +31,7 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ serverAPI }) => {
     const authed = await backend.sunshineIsAuthorized()
     setSunshineIsAuthorized(authed)
   }
-
+  
   useEffect(() => {
     setWantToggleSunshine(sunshineIsRunning)
   }, [sunshineIsRunning])
@@ -139,6 +139,8 @@ export default definePlugin((serverApi: ServerAPI) => {
   serverApi.routerHook.addRoute("/sunshine-set-user", DeckySunshineSetUser, {
     exact: true
   });
+
+  backend.serverAPI = serverApi
 
   return {
     title: <div className={staticClasses.Title}>Decky Sunshine</div>,

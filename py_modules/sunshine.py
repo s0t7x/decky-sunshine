@@ -84,9 +84,12 @@ class SunshineController:
         credentials = f"{username}:{password}"
         base64_credentials = base64.b64encode(credentials.encode('utf-8'))
         auth_header = f"Basic {base64_credentials.decode('utf-8')}"
-        self.authHeader = auth_header
+        return self.setAuthHeaderRaw(auth_header)
+    
+    def setAuthHeaderRaw(self, authHeader):
+        self.authHeader = str(authHeader)
         self.needsAuth = False
-        return auth_header
+        return self.authHeader
 
     def __init__(self) -> None:
         """
