@@ -1,12 +1,12 @@
 # Streaming Gameplay to Platforms like Twitch
 
-This guide will shortly summarize (Getting Started with Decky Sunshine)[https://github.com/s0t7x/decky-sunshine/blob/main/docs/getting_started.md] and explain further steps to stream your Steam Deck gameplay to platforms like Twitch using Open Broadcaster Software (OBS) on your PC.
+This guide will shortly summarize [Getting Started with Decky Sunshine](https://github.com/s0t7x/decky-sunshine/blob/main/docs/getting_started.md) and explain further steps to stream your Steam Deck gameplay to platforms like Twitch using Open Broadcaster Software (OBS) on your PC.
 
 ## Prepare Streaming
 
 On your Steam Deck:
 
-1. Make sure (Decky)[https://decky.xyz] is installed
+1. Make sure [Decky Plugin Loader](https://decky.xyz) is installed
 2. Download and install Decky Sunshine
 3. Enable the Sunshine Server
    
@@ -18,11 +18,11 @@ On your PC:
 4. Enter the PIN displayed on your PC and click on "Pair".
 5. Once paired, the Moonlight Client will connect to the Sunshine server and stream your Steam Deck.
 
-For a detailed guide on how to install Decky Sunshine look at (Getting Started with Decky Sunshine)[https://github.com/s0t7x/decky-sunshine/blob/main/docs/getting_started.md].
+For a detailed guide on how to install Decky Sunshine take a look at [Getting Started with Decky Sunshine](https://github.com/s0t7x/decky-sunshine/blob/main/docs/getting_started.md).
 
 ## Setting up OBS for Streaming
 
-1. Download and install OBS Studio from the official website (https://obsproject.com/).
+1. Download and install OBS Studio from the [official website](https://obsproject.com/).
 2. Launch OBS and create a new scene.
 3. In the "Sources" panel, click on the "+" button and select "Game Capture".
 4. In the "Create/Select Source" window, choose the Moonlight Desktop Client from the list of running applications.
