@@ -19,6 +19,7 @@ Decky Sunshine is the perfect solution for capturing your Steam Deck gameplay. W
 ## Features
 
 - Toggle the Sunshine game streaming server on/off directly from Decky's interface.
+- Easily pair new devices with Sunshine.
 - Automatic installation and setup if Sunshine is not already installed.
 - Stream games from your Steam Deck to other devices over a local network.
 
