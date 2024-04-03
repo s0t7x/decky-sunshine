@@ -1,9 +1,9 @@
 {
   "name": "Decky Sunshine",
   "author": "s0t7x",
-  "flags": ["debug", "root"],
+  "flags": ["root"],
   "publish": {
-    "tags": ["root"],
+    "tags": ["root", "streaming", "moonlight"],
     "description": "Decky plugin to simply integrate Sunshine server into game mode.",
     "image": "https://opengraph.githubassets.com/1/SteamDeckHomebrew/PluginLoader"
   }
