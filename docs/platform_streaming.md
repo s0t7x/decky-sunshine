@@ -1,37 +1,24 @@
 # Streaming Gameplay to Platforms like Twitch
 
-This guide will walk you through the steps to stream your Steam Deck gameplay to platforms like Twitch using the Decky Sunshine Plugin and Open Broadcaster Software (OBS).
+This guide will shortly summarize (Getting Started with Decky Sunshine)[https://github.com/s0t7x/decky-sunshine/blob/main/docs/getting_started.md] and explain further steps to stream your Steam Deck gameplay to platforms like Twitch using Open Broadcaster Software (OBS) on your PC.
 
-## Installing Decky
+## Prepare Streaming
 
-1. Access the Decky website (https://decky.xyz) from your Steam Deck and download the installer.
-2. If your browser cannot run files, open the downloaded installer from the Dolphin file manager.
+On your Steam Deck:
 
-## Installing Decky Sunshine Plugin
+1. Make sure (Decky)[https://decky.xyz] is installed
+2. Download and install Decky Sunshine
+3. Enable the Sunshine Server
+   
+On your PC:
 
-1. Download the latest ZIP from [releases](https://github.com/s0t7x/decky-sunshine/releases/latest).
-2. Open the Quick Access Menu navigate to Decky and click the Gear-Icon in the top-right corner to open Decky's settings.
-3. In "General" enable "Developer Settings" and navigate to the "Developer" tab.
-4. Click on "Install from ZIP" and select the `Decky.Sunshine.zip` file.
-5. The plugin will now be installed and accessible from the Quick Access Menu.
+1. Download and install the Moonlight Desktop Client
+2. In the Moonlight Client Select your Steam Deck.
+3. On your Steam Deck navigate to Decky Sunshine in the Quick Access Menu.
+4. Enter the PIN displayed on your PC and click on "Pair".
+5. Once paired, the Moonlight Client will connect to the Sunshine server and stream your Steam Deck.
 
-## Starting the Sunshine Server
-
-1. In the Decky tab of the Quick Access Menu, locate the Decky Sunshine Plugin and click on the toggle button to enable the Sunshine server.
-
-## Installing Moonlight Client on a Windows PC
-
-1. Download the Moonlight Desktop Client for Windows from the official website (https://moonlight-stream.org/).
-2. Run the installer and follow the on-screen instructions to complete the installation.
-
-## Pairing the Moonlight Client with the Sunshine Server
-
-1. Launch the Moonlight Desktop Client on your Windows PC.
-2. You may wait till your Sunshine Server is located or add its IP manually.
-3. Select your Steam Deck.
-4. On your Steam Deck navigate to Decky Sunshine in the Quick Access Menu.
-5. Enter the PIN displayed on your PC and click on "Pair".
-6. Once paired, the Moonlight Client will connect to the Sunshine server and stream your Steam Deck.
+For a detailed guide on how to install Decky Sunshine look at (Getting Started with Decky Sunshine)[https://github.com/s0t7x/decky-sunshine/blob/main/docs/getting_started.md].
 
 ## Setting up OBS for Streaming
 
