@@ -14,7 +14,7 @@
   </p>
 </div>
 
-Decky Sunshine is the perfect solution for capturing your Steam Deck gameplay. With this powerful plugin, you can easily toggle the Sunshine game streaming server and pair new devices, allowing you to share your gaming experiences with the world seamlessly.
+Decky Sunshine is the perfect solution for capturing your Steam Deck gameplay. With this plugin, you can easily toggle the Sunshine game streaming server and pair new devices, allowing you to share your gaming experiences with the world seamlessly.
 
 ## Features
 
