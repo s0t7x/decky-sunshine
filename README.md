@@ -55,7 +55,3 @@ Thanks to [Decky Plugin Loader](https://decky.xyz/) for being amazing.
 Thanks to [CameronRedmore/memory-deck](https://github.com/CameronRedmore/memory-deck) for the work on `NumpadInput` which was adapted for `PinInput`.
 
 Special thanks to the developers of Sunshine for creating the game streaming server.
-
-## License
-
-This project is licensed under the [GNU GPLv3 License](https://github.com/s0t7x/decky-sunshine/blob/main/LICENSE).
