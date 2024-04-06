@@ -28,7 +28,7 @@ jobs:
           format: "YYYYMMDD-HHmmss"
       - name: Check Tag
         env:
-            NAME: "nightly-${{ steps.date.outputs.time }}"
+          NAME: "nightly-${{ steps.date.outputs.time }}"
         run: echo "$NAME"
       - name: Nightly Release
         if: steps.build.outcome == 'success'
