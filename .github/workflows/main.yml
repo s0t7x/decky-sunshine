@@ -24,11 +24,17 @@ jobs:
       - name: Get current date
         id: date
         run: echo "NOW=$(date + '%Y%m%d-T%H%M%S')" >> $GITHUB_ENV
+      - name: Generate Tag
+        env:
+            NAME: "nightly-${{ env.NOW }}"
+        run: echo "$NAME"
       - name: Nightly Release
         if: steps.build.outcome == 'success'
+        env:
+          NAME: "nightly-${{ env.NOW }}"
         uses: softprops/action-gh-release@v2
         with:
           prerelease: true
-          name: "nightly-${{ env.NOW }}"
-          tag_name: "nightly-${{ env.NOW }}"
+          name: ${ NAME }
+          tag_name: ${ NAME }
           files: "./out/Decky\ Sunshine.zip"
