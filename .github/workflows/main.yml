@@ -25,7 +25,7 @@ jobs:
         id: date
         uses: Kaven-Universe/github-action-current-date-time@v1
         with:
-          format: "yyyy-MM-dd"
+          format: "YYYYMMDD-HHmmss"
       - name: Check Tag
         env:
             NAME: "nightly-${{ steps.date.outputs.time }}"
@@ -37,6 +37,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           prerelease: true
-          name: $NAME
-          tag_name: $NAME
+          name: ${{ NAME }}
+          tag_name: ${{ NAME }}
           files: "./out/Decky\ Sunshine.zip"
