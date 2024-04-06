@@ -30,4 +30,5 @@ jobs:
         with:
           prerelease: true
           name: "nightly-${{ env.NOW }}"
+          tag_name: "nightly-${{ env.NOW }}"
           files: Release.txt
