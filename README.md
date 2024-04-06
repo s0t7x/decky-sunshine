@@ -8,6 +8,9 @@
     <a href="https://github.com/s0t7x/decky-sunshine/issues" target="_blank">
       <img src="https://img.shields.io/github/issues/s0t7x/decky-sunshine?style=flat-square" alt="Issues" />
     </a>
+
+[![Build](https://github.com/s0t7x/decky-sunshine/actions/workflows/main.yml/badge.svg)](https://github.com/s0t7x/decky-sunshine/actions/workflows/main.yml)
+    
   </p>
 </div>
 
