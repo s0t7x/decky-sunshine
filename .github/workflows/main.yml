@@ -1,4 +1,4 @@
-name: bundle
+name: Build
 on: push
 jobs:
   bundle:
