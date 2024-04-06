@@ -26,15 +26,15 @@ jobs:
     steps:
       - name: Get current date
         id: date
-        run: echo "::set-output name=date::$(date +'%Y-%m-%d')"
+        run: echo "date=$(date +'%Y-%m-%d')" >> $DATE
       - name: Create release
         if: steps.check.outputs.triggered == 'true'
         env:
-          TAG_NAME: nightly-tag-${{ steps.date.outputs.date }}
-          RELEASE_NAME: nightly-release-${{ steps.date.outputs.date }}
+          TAG_NAME: nightly-tag-${$DATE}
+          RELEASE_NAME: nightly-release-${$DATE}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "$TAG_NAME" \
+          gh release create "${TAG_NAME}" \
               --repo="$GITHUB_REPOSITORY" \
-              --title="$RELEASE_NAME" \
+              --title="{$RELEASE_NAME}" \
               --generate-notes
