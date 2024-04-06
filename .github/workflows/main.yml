@@ -23,18 +23,20 @@ jobs:
         run: ./.vscode/build.sh
       - name: Get current date
         id: date
-        run: echo "NOW=$(date + '%Y%m%d-T%H%M%S')" >> $GITHUB_ENV
-      - name: Generate Tag
+        uses: Kaven-Universe/github-action-current-date-time@v1
+        with:
+          format: "yyyy-MM-dd"
+      - name: Check Tag
         env:
-            NAME: "nightly-${{ env.NOW }}"
+            NAME: "nightly-${{ steps.date.outputs.time }}"
         run: echo "$NAME"
       - name: Nightly Release
         if: steps.build.outcome == 'success'
         env:
-          NAME: "nightly-${{ env.NOW }}"
+          NAME: "nightly-${{ steps.date.outputs.time }}"
         uses: softprops/action-gh-release@v2
         with:
           prerelease: true
-          name: ${ NAME }
-          tag_name: ${ NAME }
+          name: $NAME
+          tag_name: $NAME
           files: "./out/Decky\ Sunshine.zip"
