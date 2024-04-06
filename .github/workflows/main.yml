@@ -1,4 +1,4 @@
-name: Build and Release
+.name: Build and Release
 on:
   push:
     branches:
@@ -37,6 +37,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           prerelease: true
-          name: ${{ NAME }}
-          tag_name: ${{ NAME }}
+          name: ${{ env.NAME }}
+          tag_name: ${{ env.NAME }}
           files: "./out/Decky\ Sunshine.zip"
