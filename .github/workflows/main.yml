@@ -1,6 +1,13 @@
 jobs:
-  package:
+  bundle:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./
     steps:
-      - run: ./.vscode/setup.sh
-      - run: ./.vscode/build.sh
+      - name: Check out the repository to the runner
+        uses: actions/checkout@v4  
+      - name: Run setup
+        run: ./.vscode/setup.sh
+      - name: Run build
+        run: ./.vscode/build.sh
