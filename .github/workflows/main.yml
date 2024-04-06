@@ -19,18 +19,15 @@ jobs:
       - name: Run setup
         run: ./.vscode/setup.sh
       - name: Run build
+        id: build
         run: ./.vscode/build.sh
       - name: Get current date
         id: date
         run: echo "NOW=$(date + '%Y%m%d-T%H%M%S')" >> $GITHUB_ENV
-      - name: Create release
-        if: steps.check.outputs.triggered == 'true'
-        env:
-          TAG_NAME: nightly-tag-${{ env.NOW }}
-          RELEASE_NAME: nightly-release-${{ env.NOW }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create "${TAG_NAME}" \
-              --repo="$GITHUB_REPOSITORY" \
-              --title="{$RELEASE_NAME}" \
-              --generate-notes
+      - name: Nightly Release
+        if: steps.build.outcome == 'success'
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: true
+          name: "nightly-${{ env.NOW }}"
+          files: Release.txt
