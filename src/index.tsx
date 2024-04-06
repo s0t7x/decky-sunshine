@@ -16,6 +16,7 @@ import { FaSun } from "react-icons/fa";
 import backend from "./util/backend";
 
 import { PINInput } from "./components/PINInput";
+import { PasswordInput } from "./components/PasswordInput";
 
 const __unused = (v: any) => v
 
@@ -92,9 +93,9 @@ const DeckySunshineLogin: VFC = () => {
   return (
     <div style={{ marginTop: "50px", color: "white" }}>
       <TextField label="Username" value={localUsername} onChange={(e) => setLocalUsername(e.target.value)}></TextField>
-      <TextField label="Password" bIsPassword={true} bAlwaysShowClearAction={true} value={localPassword} onChange={(e) => {
-        setLocalPassword(e.target.value);
-      }}></TextField>
+      <PasswordInput label="Password" value={localPassword} onChange={(value) => {
+        setLocalPassword(value);
+      }}></PasswordInput>
       <ButtonItem onClick={() => {
         localStorage.setItem("decky_sunshine:localUsername", localUsername)
         Navigation.NavigateBack();
