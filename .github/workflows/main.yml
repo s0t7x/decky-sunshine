@@ -37,6 +37,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           prerelease: true
+          generate_release_notes: true
           name: ${{ env.NAME }}
           tag_name: ${{ env.NAME }}
           files: "./out/Decky\ Sunshine.zip"
