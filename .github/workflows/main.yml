@@ -1,3 +1,5 @@
+name: bundle
+on: push
 jobs:
   bundle:
     runs-on: ubuntu-latest
