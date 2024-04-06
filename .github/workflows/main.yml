@@ -31,4 +31,4 @@ jobs:
           prerelease: true
           name: "nightly-${{ env.NOW }}"
           tag_name: "nightly-${{ env.NOW }}"
-          files: Release.txt
+          files: "./out/Decky\ Sunshine.zip"
