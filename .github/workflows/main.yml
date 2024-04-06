@@ -1,0 +1,6 @@
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - run: ./.vscode/setup.sh
+      - run: ./.vscode/build.sh
