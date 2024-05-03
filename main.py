@@ -79,8 +79,10 @@ class Plugin:
                 self.freshInstallation = True
                 decky_plugin.logger.info("Sunshine installed")
                 self.sunshineController.start()
-                triesLeft = 10
-                while not self.isInstalled() or triesLeft < 1:
+                triesLeft = 5
+                time.sleep(5)
+                while not self.sunshineController.isRunning() or triesLeft < 1:
+                    triesLeft -= 1
                     time.sleep(1)
                 self.sunshineController.setUser("decky_sunshine", "decky_sunshine", "decky_sunshine")
                 self.sunshineController.setAuthHeader("decky_sunshine", "decky_sunshine")
