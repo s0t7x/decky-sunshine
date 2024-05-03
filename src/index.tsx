@@ -9,7 +9,8 @@ import {
   Spinner,
   Navigation,
   TextField,
-  QuickAccessTab
+  QuickAccessTab,
+  Button
 } from "decky-frontend-lib";
 import { VFC, useEffect, useState } from "react";
 import { FaSun } from "react-icons/fa";
@@ -76,6 +77,10 @@ const Content: VFC<{ serverAPI: ServerAPI }> = ({ serverAPI }) => {
         </PanelSectionRow>)}
       {/* {sunshineIsEnabled &&
         <ButtonItem onClick={() => Navigation.NavigateToExternalWeb("https://127.0.0.1:47990")}>Web UI</ButtonItem>} */}
+      <ButtonItem onClick={() => {
+        Navigation.CloseSideMenus();
+        Navigation.Navigate("/sunshine-set-user");
+      }}>Set User</ButtonItem>
     </PanelSection>
 };
 
@@ -113,26 +118,45 @@ const DeckySunshineSetUser: VFC = () => {
   const [newPassword, setNewPassword] = useState("")
   const [confirmNewPassword, setConfirmNewPassword] = useState("")
 
+  const [step, setStep] = useState(0)
+
   return (
     <div style={{ marginTop: "50px", color: "white" }}>
-      <TextField label="currentUsername" value={currentUsername} onChange={(e) => setCurrentUsername(e.target.value)}></TextField>
-      <TextField label="currentPassword" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)}></TextField>
-      <TextField label="newUsername" value={newUsername} onChange={(e) => setNewUsername(e.target.value)}></TextField>
-      <TextField label="newPassword" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}></TextField>
-      <TextField label="confirmNewPassword" value={confirmNewPassword} onChange={(e) => setConfirmNewPassword(e.target.value)}></TextField>
+      <h2>Set new Credentials</h2>
+      {(step == 0) ?
+        <div>
+          <TextField label="currentUsername" value={currentUsername} onChange={(e) => setCurrentUsername(e.target.value)}></TextField>
+          <PasswordInput label="currentPassword" value={currentPassword} onChange={(e) => setCurrentPassword(e)}></PasswordInput>
+          <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between" }}>
+            <Button onClick={() => {
+              Navigation.NavigateBack();
+              Navigation.OpenQuickAccessMenu(QuickAccessTab.Decky)
+            }}>Cancel</Button>
+            <Button onClick={() => setStep(1)}>Next</Button>
+          </div>
+        </div> :
+        <div>
+          <TextField label="newUsername" value={newUsername} onChange={(e) => setNewUsername(e.target.value)}></TextField>
+          <PasswordInput label="newPassword" value={newPassword} onChange={(e) => setNewPassword(e)}></PasswordInput>
+          <PasswordInput label="confirmNewPassword" value={confirmNewPassword} onChange={(e) => setConfirmNewPassword(e)}></PasswordInput>
+          <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+            <ButtonItem onClick={() => setStep(0)}>Back</ButtonItem>
+            <ButtonItem onClick={() => {
+              Navigation.NavigateBack();
+              backend.sunshineSetUser(newUsername, newPassword, confirmNewPassword, currentUsername, currentPassword);
+              Navigation.OpenQuickAccessMenu(QuickAccessTab.Decky)
+            }} disabled={
+              currentUsername.length < 1 ||
+              currentPassword.length < 1 ||
+              newUsername.length < 1 ||
+              newPassword.length < 1 ||
+              confirmNewPassword.length < 1
+            }>Set Credentials</ButtonItem>
+          </div>
+        </div>
+      }
 
-      <ButtonItem onClick={() => {
-        Navigation.NavigateBack();
-        backend.sunshineSetUser(newUsername, newPassword, confirmNewPassword, currentUsername, currentPassword);
-        Navigation.OpenQuickAccessMenu(QuickAccessTab.Decky)
-      }} disabled={
-        currentUsername.length < 1 ||
-        currentPassword.length < 1 ||
-        newUsername.length < 1 ||
-        newPassword.length < 1 ||
-        confirmNewPassword.length < 1
-      }>Set Credentials</ButtonItem>
-    </div>
+    </div >
   );
 };
 

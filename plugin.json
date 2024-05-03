@@ -3,7 +3,7 @@
   "author": "s0t7x",
   "flags": ["root"],
   "publish": {
-    "tags": ["root", "streaming", "moonlight"],
+    "tags": ["root", "streaming", "moonlight", "sunshine", "server"],
     "description": "Decky plugin to integrate Sunshine server into game mode.",
     "image": "https://opengraph.githubassets.com/1/s0t7x/decky-sunshine"
   }

@@ -10,11 +10,9 @@ This guide will walk you through the steps to stream your Steam Deck gameplay to
 
 ## Installing Decky Sunshine Plugin
 
-1. Download the latest ZIP from [releases](https://github.com/s0t7x/decky-sunshine/releases/latest).
-2. Open the Quick Access Menu navigate to Decky and click the Gear-Icon in the top-right corner to open Decky's settings.
-3. In "General" enable "Developer Settings" and navigate to the "Developer" tab.
-4. Click on "Install from ZIP" and select the `Decky.Sunshine.zip` file.
-5. The plugin will now be installed and accessible from the Quick Access Menu.
+1. Open the Decky Plugin Store
+2. Search for "Decky Sunshine"
+3. Press install
 
 ## Starting the Sunshine Server
 

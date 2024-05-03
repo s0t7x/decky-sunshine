@@ -7,7 +7,7 @@ This guide will shortly summarize [Getting Started with Decky Sunshine](https://
 On your Steam Deck:
 
 1. Make sure [Decky Plugin Loader](https://decky.xyz) is installed
-2. Download and install Decky Sunshine
+2. Install Decky Sunshine
 3. Enable the Sunshine Server
    
 On your PC:
