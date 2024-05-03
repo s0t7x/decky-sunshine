@@ -1,6 +1,8 @@
 import decky_plugin
-import os
+
 from pathlib import Path
+import os
+import time
 
 from settings import SettingsManager
 from sunshine import SunshineController
@@ -77,6 +79,9 @@ class Plugin:
                 self.freshInstallation = True
                 decky_plugin.logger.info("Sunshine installed")
                 self.sunshineController.start()
+                triesLeft = 10
+                while not self.isInstalled() or triesLeft < 1:
+                    time.sleep(1)
                 self.sunshineController.setUser("decky_sunshine", "decky_sunshine", "decky_sunshine")
                 self.sunshineController.setAuthHeader("decky_sunshine", "decky_sunshine")
         else:
