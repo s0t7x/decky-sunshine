@@ -63,7 +63,7 @@ const Content: VFC<{ serverAPI: any }> = ({ serverAPI }) => {
 
   // Show spinner while Sunshine state is being updated
   if (wantToggleSunshine !== sunshineIsRunning) {
-    return <Spinner />;
+    return <Spinner />
   }
 
   return (
