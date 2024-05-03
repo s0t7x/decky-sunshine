@@ -25,17 +25,17 @@ const Content: VFC<{ serverAPI: any }> = ({ serverAPI }) => {
 
   // Function to fetch Sunshine state from the backend
   const updateSunshineState = async () => {
-    const running = await backend.sunshineIsRunning();
-    setSunshineIsRunning(running);
-    
     const authed = await backend.sunshineIsAuthorized();
     setSunshineIsAuthorized(authed);
-    
+
+    const running = await backend.sunshineIsRunning();
+    setSunshineIsRunning(running);
+
     setWantToggleSunshine(running)
   };
 
   useEffect(() => {
-    // Update Sunshine state when the component mounts or wantToggleSunshine changes
+    // Update Sunshine state when the component mounts
     updateSunshineState();
   }, []);
 
@@ -47,14 +47,18 @@ const Content: VFC<{ serverAPI: any }> = ({ serverAPI }) => {
       } else {
         backend.sunshineStop();
       }
-      // Update Sunshine state after 2.5 seconds
-      const timeout = setTimeout(() => {
-        updateSunshineState();
-      }, 2500);
-      // Cleanup timeout to avoid memory leaks
-      return () => clearTimeout(timeout);
+      // Update state each 2 seconds till loading is done
+      const interval = setInterval(() => {
+        if (wantToggleSunshine !== sunshineIsRunning) {
+          updateSunshineState();
+        } else {
+          clearInterval(interval)
+        }
+      }, 2000);
+      // Cleanup interval to avoid memory leaks
+      return () => clearInterval(interval);
     }
-    return
+    return () => { }
   }, [wantToggleSunshine]);
 
   // Show spinner while Sunshine state is being updated
@@ -109,7 +113,7 @@ const Content: VFC<{ serverAPI: any }> = ({ serverAPI }) => {
 
 const DeckySunshineLogin: VFC = () => {
   // State variables for local username and password
-  const [localUsername, setLocalUsername] = useState("");
+  const [localUsername, setLocalUsername] = useState(localStorage.getItem("decky_sunshine:localUsername") || "");
   const [localPassword, setLocalPassword] = useState("");
 
   return (
@@ -125,6 +129,14 @@ const DeckySunshineLogin: VFC = () => {
         value={localPassword}
         onChange={(value) => setLocalPassword(value)}
       />
+      {/* Button to not accidentally being forced to overwrite existing credentials */}
+      <ButtonItem
+        onClick={() => {
+          Navigation.NavigateBack();
+          Navigation.OpenQuickAccessMenu(QuickAccessTab.Decky);
+        }}>
+        Cancel
+      </ButtonItem>
       {/* Button to login with entered credentials */}
       <ButtonItem
         onClick={() => {

@@ -1,6 +1,6 @@
 // Basic React component that renders a numeric input field
 
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { PanelSectionRow, gamepadDialogClasses, joinClassNames, DialogButton, Focusable } from "decky-frontend-lib";
 
 import { playSound } from "../util/util";
@@ -19,20 +19,9 @@ interface PINInputProps {
 export const PINInput = (props: PINInputProps): JSX.Element => {
   const { label, value, onChange, onSend, sendLabel } = props;
 
-  const [active] = useState(true);
-
-  useEffect(() => {
-    if (active) {
-      playSound("https://steamloopback.host/sounds/deck_ui_side_menu_fly_in.wav");
-    }
-    else {
-      playSound("https://steamloopback.host/sounds/deck_ui_side_menu_fly_out.wav");
-    }
-  }, [active]);
-
   const enterDigit = (digit: string) => {
     //Concat the digit to the current value
-    if(value.length == 4) {
+    if (value.length == 4) {
       playSound("https://steamloopback.host/sounds/deck_ui_default_activation.wav");
       return
     }
@@ -70,7 +59,6 @@ export const PINInput = (props: PINInputProps): JSX.Element => {
         <div className={FieldWithSeparator}>
           <div
             className={gamepadDialogClasses.FieldLabelRow}
-          // onClick={() => setActive(!active)}
           >
             <div
               className={gamepadDialogClasses.FieldLabel}
@@ -88,36 +76,34 @@ export const PINInput = (props: PINInputProps): JSX.Element => {
         </div>
       </PanelSectionRow>
 
-      {/* If active */}
-      {active && (
-        <React.Fragment>
-          {/* Override min-width for DialogButtons */}
-          <style>{`
+
+      <React.Fragment>
+        {/* Override min-width for DialogButtons */}
+        <style>{`
             .NumpadGrid button {
               min-width: 0 !important; 
             }
           `}</style>
 
-          {/* 3x4 Digit Grid */}
-          <Focusable className="NumpadGrid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gridTemplateRows: "repeat(4, 1fr)", gridGap: "0.5rem", padding: "0px 0" }}>
-            <DialogButton onClick={() => enterDigit("7")}>7</DialogButton>
-            <DialogButton onClick={() => enterDigit("8")}>8</DialogButton>
-            <DialogButton onClick={() => enterDigit("9")}>9</DialogButton>
+        {/* 3x4 Digit Grid */}
+        <Focusable className="NumpadGrid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gridTemplateRows: "repeat(4, 1fr)", gridGap: "0.5rem", padding: "0px 0" }}>
+          <DialogButton onClick={() => enterDigit("7")}>7</DialogButton>
+          <DialogButton onClick={() => enterDigit("8")}>8</DialogButton>
+          <DialogButton onClick={() => enterDigit("9")}>9</DialogButton>
 
-            <DialogButton onClick={() => enterDigit("4")}>4</DialogButton>
-            <DialogButton onClick={() => enterDigit("5")}>5</DialogButton>
-            <DialogButton onClick={() => enterDigit("6")}>6</DialogButton>
+          <DialogButton onClick={() => enterDigit("4")}>4</DialogButton>
+          <DialogButton onClick={() => enterDigit("5")}>5</DialogButton>
+          <DialogButton onClick={() => enterDigit("6")}>6</DialogButton>
 
-            <DialogButton onClick={() => enterDigit("1")}>1</DialogButton>
-            <DialogButton onClick={() => enterDigit("2")}>2</DialogButton>
-            <DialogButton onClick={() => enterDigit("3")}>3</DialogButton>
+          <DialogButton onClick={() => enterDigit("1")}>1</DialogButton>
+          <DialogButton onClick={() => enterDigit("2")}>2</DialogButton>
+          <DialogButton onClick={() => enterDigit("3")}>3</DialogButton>
 
-            <DialogButton onClick={() => backspace()}>&larr;</DialogButton>
-            <DialogButton onClick={() => enterDigit("0")}>0</DialogButton>
-            <DialogButton disabled={value.length < 4} onClick={() => sendPin()} style={{ backgroundColor: "green" }}>{sendLabel}</DialogButton>
-          </Focusable>
-        </React.Fragment>
-      )}
+          <DialogButton onClick={() => backspace()}>&larr;</DialogButton>
+          <DialogButton onClick={() => enterDigit("0")}>0</DialogButton>
+          <DialogButton disabled={value.length < 4} onClick={() => sendPin()} style={{ backgroundColor: "green" }}>{sendLabel}</DialogButton>
+        </Focusable>
+      </React.Fragment>
     </React.Fragment>
   );
 }
