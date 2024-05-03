@@ -36,7 +36,7 @@ const Content: VFC<{ serverAPI: any }> = ({ serverAPI }) => {
 
   useEffect(() => {
     // Update Sunshine state when the component mounts
-    updateSunshineState();
+    updateSunshineState()
   }, []);
 
   useEffect(() => {

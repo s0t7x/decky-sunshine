@@ -33,11 +33,13 @@ class Plugin:
         res = self.sunshineController.start()
         if res:
             decky_plugin.logger.info("Sunshine started")
+            self.settingManager.setSetting("lastRunState", "start")
         return res
         
     async def sunshineStop(self):
         decky_plugin.logger.info("Stopping sunshine...")
         self.sunshineController.stop()
+        self.settingManager.setSetting("lastRunState", "stop")
         return True
     
     async def sunshineIsFreshInstallation(self):
@@ -80,7 +82,7 @@ class Plugin:
                 decky_plugin.logger.info("Sunshine installed")
                 self.sunshineController.start()
                 triesLeft = 5
-                time.sleep(5)
+                time.sleep(2)
                 while not self.sunshineController.isRunning() or triesLeft < 1:
                     triesLeft -= 1
                     time.sleep(1)
@@ -92,6 +94,9 @@ class Plugin:
             if(len(lastAuthHeader) > 0):
                 self.sunshineController.setAuthHeaderRaw(lastAuthHeader)
             decky_plugin.logger.info("Sunshine is installed")
+        lastRunState = self.settingManager.getSetting("lastRunState", "")
+        if(lastRunState == "start"):
+            self.sunshineController.start()
         decky_plugin.logger.info("Decky Sunshine loaded")
 
     async def _unload(self):
