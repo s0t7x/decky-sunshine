@@ -26,15 +26,18 @@ const Content: VFC<{ serverAPI: any }> = ({ serverAPI }) => {
   // Function to fetch Sunshine state from the backend
   const updateSunshineState = async () => {
     const running = await backend.sunshineIsRunning();
-    const authed = await backend.sunshineIsAuthorized();
     setSunshineIsRunning(running);
+    
+    const authed = await backend.sunshineIsAuthorized();
     setSunshineIsAuthorized(authed);
+    
+    setWantToggleSunshine(running)
   };
 
   useEffect(() => {
     // Update Sunshine state when the component mounts or wantToggleSunshine changes
     updateSunshineState();
-  }, [wantToggleSunshine]);
+  }, []);
 
   useEffect(() => {
     // Start or stop Sunshine process based on wantToggleSunshine state
@@ -44,10 +47,10 @@ const Content: VFC<{ serverAPI: any }> = ({ serverAPI }) => {
       } else {
         backend.sunshineStop();
       }
-      // Update Sunshine state after 1 second
+      // Update Sunshine state after 2.5 seconds
       const timeout = setTimeout(() => {
         updateSunshineState();
-      }, 1000);
+      }, 2500);
       // Cleanup timeout to avoid memory leaks
       return () => clearTimeout(timeout);
     }
