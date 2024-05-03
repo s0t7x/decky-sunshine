@@ -22,21 +22,21 @@ Decky Sunshine is the perfect solution for capturing your Steam Deck gameplay. W
 
 [How do I stream my SteamDeck to Twitch using my PC?](https://github.com/s0t7x/decky-sunshine/blob/main/docs/platform_streaming.md)
 
+[How to manually install Sunshine?](https://github.com/s0t7x/decky-sunshine/blob/main/docs/manual_install.md)
+
 ## Features
 
 - Toggle the Sunshine game streaming server on/off directly from Decky's interface.
 - Easily pair new devices with Sunshine.
 - Automatic installation and setup if Sunshine is not already installed.
+- Resume last state on reboot
 - Stream games from your Steam Deck to other devices over a local network.
 
 ## Installation
 
-1. Download the latest ZIP from [releases](https://github.com/s0t7x/decky-sunshine/releases/latest).
-2. Enable the plugin in Decky:
-   - Open Decky settings.
-   - Activate Developer settings.
-   - Navigate to the Developer tab and press 'Install from ZIP'.
-   - Find the "Decky.Sunshine.zip" file and install it.
+1. Make sure [Decky Plugin loader](https://decky.xyz) is installed
+2. Open the Decky Plugin Store
+2. Search for "Decky Sunshine" and install it
 
 ## Usage
 
@@ -55,6 +55,6 @@ Contributions to the Decky Sunshine project are welcome! If you have any ideas f
 
 Thanks to [Decky Plugin Loader](https://decky.xyz/) for being amazing.
 
-Thanks to [CameronRedmore/memory-deck](https://github.com/CameronRedmore/memory-deck) for the work on `NumpadInput` which was adapted for `PinInput`.
+Thanks to [CameronRedmore/memory-deck](https://github.com/CameronRedmore/memory-deck) for the work on `NumpadInput` which was adapted for `PINInput.tsx`.
 
 Special thanks to the developers of Sunshine for creating the game streaming server.

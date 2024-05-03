@@ -1,7 +1,5 @@
-// Basic React component that renders a numeric input field
-
-import React, { ChangeEvent, ChangeEventHandler, useEffect, useRef, useState } from "react";
-import { PanelSectionRow, gamepadDialogClasses, DialogButton, Focusable, TextField } from "decky-frontend-lib";
+import React from "react";
+import { TextField } from "decky-frontend-lib";
 
 // NumericInputProps interface with value and onChange properties
 interface PasswordInputProps {

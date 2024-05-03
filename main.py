@@ -1,6 +1,8 @@
 import decky_plugin
-import os
+
 from pathlib import Path
+import os
+import time
 
 from settings import SettingsManager
 from sunshine import SunshineController
@@ -31,11 +33,13 @@ class Plugin:
         res = self.sunshineController.start()
         if res:
             decky_plugin.logger.info("Sunshine started")
+            self.settingManager.setSetting("lastRunState", "start")
         return res
         
     async def sunshineStop(self):
         decky_plugin.logger.info("Stopping sunshine...")
         self.sunshineController.stop()
+        self.settingManager.setSetting("lastRunState", "stop")
         return True
     
     async def sunshineIsFreshInstallation(self):
@@ -77,6 +81,11 @@ class Plugin:
                 self.freshInstallation = True
                 decky_plugin.logger.info("Sunshine installed")
                 self.sunshineController.start()
+                triesLeft = 5
+                time.sleep(2)
+                while not self.sunshineController.isRunning() or triesLeft < 1:
+                    triesLeft -= 1
+                    time.sleep(1)
                 self.sunshineController.setUser("decky_sunshine", "decky_sunshine", "decky_sunshine")
                 self.sunshineController.setAuthHeader("decky_sunshine", "decky_sunshine")
         else:
@@ -85,6 +94,9 @@ class Plugin:
             if(len(lastAuthHeader) > 0):
                 self.sunshineController.setAuthHeaderRaw(lastAuthHeader)
             decky_plugin.logger.info("Sunshine is installed")
+        lastRunState = self.settingManager.getSetting("lastRunState", "")
+        if(lastRunState == "start"):
+            self.sunshineController.start()
         decky_plugin.logger.info("Decky Sunshine loaded")
 
     async def _unload(self):
