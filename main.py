@@ -96,7 +96,7 @@ class Plugin:
             decky_plugin.logger.info("Sunshine is installed")
         lastRunState = self.settingManager.getSetting("lastRunState", "")
         if(lastRunState == "start"):
-            time.sleep(20)
+            time.sleep(60)
             self.sunshineController.start()
         decky_plugin.logger.info("Decky Sunshine loaded")
 
