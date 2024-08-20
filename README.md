@@ -18,7 +18,7 @@ Decky Sunshine is the perfect solution for capturing your Steam Deck gameplay. W
 
 [Getting Started with Decky Sunshine](https://github.com/s0t7x/decky-sunshine/blob/main/docs/getting_started.md)
 
-[What exaclty does all of this mean?](https://github.com/s0t7x/decky-sunshine/blob/main/docs/about.md)
+[What exactly does all of this mean?](https://github.com/s0t7x/decky-sunshine/blob/main/docs/about.md)
 
 [How do I stream my SteamDeck to Twitch using my PC?](https://github.com/s0t7x/decky-sunshine/blob/main/docs/platform_streaming.md)
 
