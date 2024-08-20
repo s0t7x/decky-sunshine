@@ -12,7 +12,7 @@ The Decky Sunshine Plugin is a plugin specifically designed to work with the Dec
 
 ## Sunshine (Open Source Moonlight Game Streaming Server)
 
-Sunshine is an open-source implementation of the Moonlight game streaming server, which allows you to stream games from your Steam Deck to other devices over a local network or the internet. It is based on the Moonlight game streaming protocol developed by NVIDIA.
+Sunshine is an open-source implementation of the Moonlight game streaming server, which allows you to stream games from your Steam Deck to other devices over a local network or the internet. It is based on the GameStream protocol developed by NVIDIA.
 
 ## Moonlight (Game Streaming Protocol by NVIDIA)
 
