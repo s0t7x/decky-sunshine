@@ -80,23 +80,31 @@ class Plugin:
             if installed:
                 self.freshInstallation = True
                 decky_plugin.logger.info("Sunshine installed")
-                self.sunshineController.start()
-                triesLeft = 5
-                time.sleep(2)
-                while not self.sunshineController.isRunning() or triesLeft < 1:
-                    triesLeft -= 1
-                    time.sleep(1)
-                self.sunshineController.setUser("decky_sunshine", "decky_sunshine", "decky_sunshine")
-                self.sunshineController.setAuthHeader("decky_sunshine", "decky_sunshine")
+        if not self.sunshineController.isBwrapInstalled():
+            decky_plugin.logger.info("Decky Sunshine's copy of bwrap is missing. Obtaining now...'")
+            installed = self.sunshineController.installBwrap()
+            if installed:
+                self.freshInstallation = True
+                decky_plugin.logger.info("Decky Sunshine's copy of bwrap is obtained.")
+        if self.freshInstallation is True:
+            self.sunshineController.start()
+            triesLeft = 5
+            time.sleep(2)
+            while not self.sunshineController.isRunning() or triesLeft < 1:
+                triesLeft -= 1
+                time.sleep(1)
+            self.sunshineController.setUser("decky_sunshine", "decky_sunshine", "decky_sunshine")
+            self.sunshineController.setAuthHeader("decky_sunshine", "decky_sunshine")
         else:
             lastAuthHeader = self.settingManager.getSetting("lastAuthHeader", "")
             decky_plugin.logger.info("lastAuthHeader: " + str(lastAuthHeader))
             if(len(lastAuthHeader) > 0):
                 self.sunshineController.setAuthHeaderRaw(lastAuthHeader)
             decky_plugin.logger.info("Sunshine is installed")
+            decky_plugin.logger.info("Decky Sunshine's bwrap is installed")
         lastRunState = self.settingManager.getSetting("lastRunState", "")
         if(lastRunState == "start"):
-            time.sleep(60)
+            time.sleep(20)
             self.sunshineController.start()
         decky_plugin.logger.info("Decky Sunshine loaded")
 
