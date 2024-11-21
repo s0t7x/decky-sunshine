@@ -13,7 +13,9 @@ def find_process_ids_by_name(name):
     :param name: The name of the process to search for
     :return: A list of process IDs (PIDs)
     """
-    child = subprocess.Popen(['pgrep', '-f', name], stdout=subprocess.PIPE, shell=False)
+    my_env = os.environ.copy()
+    my_env["LD_LIBRARY_PATH"] = "/usr/lib/:" + my_env["LD_LIBRARY_PATH"]
+    child = subprocess.Popen(['pgrep', '-f', name], env=my_env, stdout=subprocess.PIPE, shell=False)
     response = child.communicate()[0]
     return [int(pid) for pid in response.split()]
 
@@ -158,6 +160,33 @@ class SunshineController:
             return res.status == 200
         return False
 
+    def preRun(self) -> bool:
+        """
+        Set the permissions for our bwrap
+        :return: True if sucessfull successfully, False otherwise
+        """
+        try:
+            my_env = os.environ.copy()
+            bwrap = my_env["DECKY_PLUGIN_RUNTIME_DIR"] + "/bwrap"
+            my_env["FLATPAK_BWRAP"] = bwrap
+            my_env["LD_LIBRARY_PATH"] = "/usr/lib/:" + my_env["LD_LIBRARY_PATH"]
+            self.shellHandle = subprocess.Popen(['chown', '0:0', my_env["FLATPAK_BWRAP"]], env=my_env, user=0, stdin=subprocess.PIPE, stdout=subprocess.PIPE, preexec_fn=os.setsid)
+        except Exception as e:
+            print(f"An error occurred wwith bwrap chown: {e}")
+            self.shellHandle = None
+            return False
+        try:
+            my_env = os.environ.copy()
+            bwrap = my_env["DECKY_PLUGIN_RUNTIME_DIR"] + "/bwrap"
+            my_env["FLATPAK_BWRAP"] = bwrap
+            my_env["LD_LIBRARY_PATH"] = "/usr/lib/:" + my_env["LD_LIBRARY_PATH"]
+            child = subprocess.Popen(['chmod', 'u+s', my_env["FLATPAK_BWRAP"]], env=my_env, user=0, stdin=subprocess.PIPE, stdout=subprocess.PIPE, preexec_fn=os.setsid)
+        except Exception as e:
+            print(f"An error occurred with bwrap chmod: {e}")
+            self.shellHandle = None
+            return False
+        return True
+
     def start(self) -> bool:
         """
         Start the Sunshine process.
@@ -165,10 +194,15 @@ class SunshineController:
         """
         if self.isRunning():
             return False
+        if not self.preRun():
+            return False
         try:
             my_env = os.environ.copy()
             my_env["PULSE_SERVER"] = "unix:/run/user/1000/pulse/native"
-            self.shellHandle = subprocess.Popen("sh -c 'flatpak run --socket=wayland dev.lizardbyte.app.Sunshine'", env=my_env, user=0, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, preexec_fn=os.setsid)
+            my_env["DISPLAY"] = ":0"
+            my_env["FLATPAK_BWRAP"] = "/home/deck/homebrew/data/Decky Sunshine/bwrap"
+            my_env["LD_LIBRARY_PATH"] = "/usr/lib/:" + my_env["LD_LIBRARY_PATH"]
+            child = subprocess.Popen("sh -c 'flatpak run --socket=wayland dev.lizardbyte.app.Sunshine'", env=my_env, user=0, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, preexec_fn=os.setsid)
         except Exception as e:
             print(f"An error occurred while starting Sunshine: {e}")
             self.shellHandle = None
@@ -201,7 +235,9 @@ class SunshineController:
     def isInstalled(self) -> bool:
         # flatpak list --system | grep Sunshine
         try:
-            child = subprocess.Popen(["flatpak", "list", "--system"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            my_env = os.environ.copy()
+            my_env["LD_LIBRARY_PATH"] = "/usr/lib/:" + my_env["LD_LIBRARY_PATH"]
+            child = subprocess.Popen(["flatpak", "list", "--system"], env=my_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             response, _ = child.communicate()
             response = response.decode("utf-8")  # Decode the bytes output to a string
             for app in response.split("\n"):
@@ -210,21 +246,54 @@ class SunshineController:
         except:
             return False
         return False
+
+    def isBwrapInstalled(self) -> bool:
+        # Look for our own copy of bwrap
+        try:
+            my_env = os.environ.copy()
+            bwrap = my_env["DECKY_PLUGIN_RUNTIME_DIR"] + "/bwrap"
+
+            if os.path.isfile(bwrap):
+                return True
+            else:
+                return False
+
+        except Exception as e:
+            return False
         
     def install(self) -> bool:
         try:
-            child = subprocess.Popen(["flatpak", "install", "--system", "-y", "dev.lizardbyte.app.Sunshine"],
+            my_env = os.environ.copy()
+            my_env["LD_LIBRARY_PATH"] = "/usr/lib/:" + my_env["LD_LIBRARY_PATH"]
+            child = subprocess.Popen(["flatpak", "install", "--system", "-y", "dev.lizardbyte.app.Sunshine"], env=my_env,
                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             stdout, stderr = child.communicate()
 
             if child.returncode != 0:
                 return False
-            
+
             return True
 
         except Exception as e:
             return False
-        
+
+    def installBwrap(self) -> bool:
+        try:
+            my_env = os.environ.copy()
+            bwrap = my_env["DECKY_PLUGIN_RUNTIME_DIR"] + "/bwrap"
+            my_env["LD_LIBRARY_PATH"] = "/usr/lib/:" + my_env["LD_LIBRARY_PATH"]
+            child = subprocess.Popen(["cp", "/usr/bin/bwrap", bwrap], env=my_env,
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout, stderr = child.communicate()
+
+            if child.returncode != 0:
+                return False
+
+        except Exception as e:
+            return False
+
+        return True
+
     def setUser(self, newUsername, newPassword, confirmNewPassword, currentUsername = None, currentPassword = None) -> bool:
         data =  { "newUsername": newUsername, "newPassword": newPassword, "confirmNewPassword": confirmNewPassword }
         if(currentUsername or currentPassword):
