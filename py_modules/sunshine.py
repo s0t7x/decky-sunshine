@@ -5,9 +5,10 @@ import base64
 import json
 import ssl
 
-from urllib.request import urlopen, Request
+from urllib.request import Request, HTTPError, HTTPRedirectHandler, build_opener, HTTPSHandler
+from http.client import OK, UNAUTHORIZED
 
-def killpg(group):
+def killpg(group) -> None:
     """
     Kill a process group by sending a SIGTERM signal.
     :param group: The process group ID
@@ -17,7 +18,7 @@ def killpg(group):
     except:
         return
 
-def kill(pid):
+def kill(pid) -> None:
     """
     Kill a process by sending a SIGTERM signal.
     :param pid: The process ID
@@ -46,11 +47,14 @@ def createRequest(path, authHeader, data=None) -> Request:
         request.data = json.dumps(data).encode('utf-8')
     return request
 
+class NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
 class SunshineController:
     shellHandle = None
     controllerStore = None
     isFreshInstallation = False
-    sslContext = None
     logger = None
 
     authHeader = ""
@@ -62,9 +66,11 @@ class SunshineController:
         assert logger is not None
         self.logger = logger
 
-        self.sslContext = ssl.create_default_context()
-        self.sslContext.check_hostname = False
-        self.sslContext.verify_mode = ssl.CERT_NONE
+        sslContext = ssl.create_default_context()
+        sslContext.check_hostname = False
+        sslContext.verify_mode = ssl.CERT_NONE
+
+        self.opener = build_opener(NoRedirect(), HTTPSHandler(context=sslContext))
 
         self.environment_variables = os.environ.copy()
         self.environment_variables["PULSE_SERVER"] = "unix:/run/user/1000/pulse/native"
@@ -84,19 +90,18 @@ class SunshineController:
         """
         Kill the Sunshine process if it exists.
         """
-        pid = self.getPID()
-        if pid is not None:
+        pid = self.getSunshinePID()
+        if pid:
             kill(pid)
 
-    def getPID(self) -> int | None:
+    def getSunshinePID(self) -> int:
         """
         Get the process ID of the Sunshine process.
         :return: The process ID or None if not found
         """
-        child = subprocess.Popen(['pgrep', '-f', "sunshine"], env=self.environment_variables, stdout=subprocess.PIPE, shell=False)
-        response, _ = child.communicate()
-        sunshinePids = [int(pid) for pid in response.split()]
-        if len(sunshinePids) > 0:
+        result = subprocess.run(["pgrep", "-x", "sunshine"], capture_output=True, text=True)
+        if result.returncode == 0:
+            sunshinePids = [int(pid) for pid in result.stdout.split()]
             return sunshinePids[0]
         return None
 
@@ -113,11 +118,11 @@ class SunshineController:
         auth_header = f"Basic {base64_credentials.decode('utf-8')}"
         return self.setAuthHeaderRaw(auth_header)
 
-    def setAuthHeaderRaw(self, authHeader):
+    def setAuthHeaderRaw(self, authHeader) -> str:
         self.authHeader = str(authHeader)
         return self.authHeader
 
-    def request(self, path, data=None) -> str:
+    def request(self, path, data=None) -> str | None:
         """
         Make an HTTP request to the Sunshine server.
         :param path: The path of the request
@@ -126,29 +131,37 @@ class SunshineController:
         """
         try:
             request = createRequest(path, self.authHeader, data)
-            with urlopen(request, context=self.sslContext) as response:
-                json_response = response.read().decode()
-                return str(json_response)
-        except:
-            return ""
+            with self.opener.open(request) as response:
+                if response.getcode() != OK:
+                    return None
+                encoding = response.headers.get_content_charset() or "utf-8"
+                content = response.read().decode(encoding)
+                return content
+        except Exception as e:
+            self.logger.info(f"Exception in request to path '{path}' with data '{data}', exception: {e}")
+        return None
 
     def isRunning(self) -> bool:
         """
         Check if the Sunshine process is running.
         :return: True if the process is running, False otherwise
         """
-        return self.getPID() is not None
+        return self.getSunshinePID() is not None
 
     def isAuthorized(self) -> bool:
         """
         Check if the controller is authorized to access the Sunshine server.
         :return: True if authorized, False otherwise
         """
+        if not self.isRunning:
+            return False
         try:
             request = createRequest("/api/apps", self.authHeader)
-            with urlopen(request, context=self.sslContext) as response:
-                return response.status == 200
+            with self.opener.open(request) as response:
+                return response.getcode() == OK
         except Exception as e:
+            if not (isinstance(e, HTTPError) and e.code == UNAUTHORIZED):
+                self.logger.info(f"Exception when checking authorization status, exception: {e}")
             return False
 
     def start(self) -> bool:
@@ -156,7 +169,7 @@ class SunshineController:
         Start the Sunshine process.
         """
         if self.isRunning():
-            return
+            return True
 
         # Set the permissions for our bwrap
         try:
@@ -164,49 +177,54 @@ class SunshineController:
         except Exception as e:
             self.logger.info(f"An error occurred wwith bwrap chown: {e}")
             self.shellHandle = None
-            return
+            return False
         try:
             _ = subprocess.Popen(['chmod', 'u+s', self.environment_variables["FLATPAK_BWRAP"]], env=self.environment_variables, user=0, stdin=subprocess.PIPE, stdout=subprocess.PIPE, preexec_fn=os.setsid)
         except Exception as e:
             self.logger.info(f"An error occurred with bwrap chmod: {e}")
             self.shellHandle = None
-            return
+            return False
 
         # Run Sunshine
         try:
             _ = subprocess.Popen("sh -c 'flatpak run --socket=wayland dev.lizardbyte.app.Sunshine'", env=self.environment_variables, user=0, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, preexec_fn=os.setsid)
+        except subprocess.TimeoutExpired:
+            self.logger.error("Sunshine start took too long")
+            return False
         except Exception as e:
             self.logger.info(f"An error occurred while starting Sunshine: {e}")
             self.shellHandle = None
-            return
+            return False
+        return True
 
-    def stop(self):
+    def stop(self) -> None:
         """
         Stop the Sunshine process and shell process.
         """
         self.killShell()
         self.killSunshine()
 
-    def sendPin(self, pin):
+    def sendPin(self, pin) -> bool:
         """
         Send a PIN to the Sunshine server.
         :param pin: The PIN to send
         :return: True if the PIN was accepted, False otherwise
         """
-        res = self.request("/api/pin", { "pin": pin })
-        if len(res) <= 0:
+        res = self.request("/api/pin", { "pin": pin, "name": "Deck Sunshine Friendly Client Name" })
+        if not res:
             return False
         try:
             data = json.loads(res)
             return data["status"] == "true"
-        except:
+        except Exception as e:
+            self.logger.info(f"Exception when sending pin, exception: {e}")
             return False
 
-    def ensureDependencies(self):
+    def ensureDependencies(self) -> bool:
         """
         Ensure that Sunshine and the environment are set up as expected, and
         """
-        if self._isBwrapInstalled:
+        if self._isBwrapInstalled():
             self.logger.info("Decky Sunshine's copy of bwrap was already obtained.")
         else:
             self.logger.info("Decky Sunshine's copy of bwrap is missing. Obtaining now...'")
@@ -216,7 +234,7 @@ class SunshineController:
                 return False
             self.logger.info("Decky Sunshine's copy of bwrap obtained successfully.")
 
-        if self._isSunshineInstalled:
+        if self._isSunshineInstalled():
             self.logger.info("Sunshine already installed.")
         else:
             self.logger.info("Sunshine not installed. Installing...")
@@ -258,7 +276,7 @@ class SunshineController:
 
             return child.returncode == 0
         except Exception as e:
-            self.logger.info(f"An error occurred while installing Sunshine: {e}")
+            self.logger.info(f"An exception occurred while installing Sunshine: {e}")
             return False
 
     def _installBwrap(self) -> bool:
@@ -269,10 +287,10 @@ class SunshineController:
 
             return child.returncode == 0
         except Exception as e:
-            self.logger.info(f"An error occurred while obtaining bwrap: {e}")
+            self.logger.info(f"An exception occurred while obtaining bwrap: {e}")
             return False
 
-    def setUser(self, newUsername, newPassword, confirmNewPassword, currentUsername = None, currentPassword = None) -> bool:
+    def setUser(self, newUsername, newPassword, confirmNewPassword, currentUsername = None, currentPassword = None) -> str:
         data =  { "newUsername": newUsername, "newPassword": newPassword, "confirmNewPassword": confirmNewPassword }
 
         if(currentUsername or currentPassword):
