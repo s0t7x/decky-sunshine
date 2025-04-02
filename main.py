@@ -33,6 +33,9 @@ class Plugin:
         if res:
             decky_plugin.logger.info("Sunshine started")
             self.settingManager.setSetting("lastRunState", "start")
+        else:
+            decky_plugin.logger.info("Couldn't start Sunshine")
+            self.settingManager.setSetting("lastRunState", "stop")
         return res
 
     async def sunshineStop(self):
@@ -69,13 +72,13 @@ class Plugin:
 
     async def _main(self):
         if self.sunshineController is None:
-            self.sunshineController = SunshineController()
+            self.sunshineController = SunshineController(decky_plugin.logger)
 
         if self.settingManager is None:
             decky_plugin.logger.info("Reading settings...")
             self.settingManager = SettingsManager(name = "decky-sunshine", settings_directory=os.environ["DECKY_PLUGIN_SETTINGS_DIR"])
             self.settingManager.read()
-            decky_plugin.logger.info(str(self.settingManager))
+            decky_plugin.logger.info(f"Read settings: {str(self.settingManager.settings)}")
 
         if not self.sunshineController.ensureDependencies():
             return
