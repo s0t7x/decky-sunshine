@@ -68,9 +68,10 @@ class Plugin:
         decky_plugin.logger.info("Set AuthHeader...")
         res = self.sunshineController.setAuthHeader(username, password)
         self.settingManager.setSetting("lastAuthHeader", str(res))
-        decky_plugin.logger.info("AuthHeader set " + res)
+        decky_plugin.logger.info("AuthHeader set")
 
     async def _main(self):
+        decky_plugin.logger.info("Decky Sunshine version: " + decky_plugin.__version__)
         if self.sunshineController is None:
             self.sunshineController = SunshineController(decky_plugin.logger)
 
@@ -78,7 +79,7 @@ class Plugin:
             decky_plugin.logger.info("Reading settings...")
             self.settingManager = SettingsManager(name = "decky-sunshine", settings_directory=os.environ["DECKY_PLUGIN_SETTINGS_DIR"])
             self.settingManager.read()
-            decky_plugin.logger.info(f"Read settings: {str(self.settingManager.settings)}")
+            decky_plugin.logger.info(f"Read settings")
 
         if not self.sunshineController.ensureDependencies():
             return
@@ -95,7 +96,6 @@ class Plugin:
             decky_plugin.logger.info("AuthHeader set " + res)
         else:
             lastAuthHeader = self.settingManager.getSetting("lastAuthHeader", "")
-            decky_plugin.logger.info("lastAuthHeader: " + str(lastAuthHeader))
             if(len(lastAuthHeader) > 0):
                 self.sunshineController.setAuthHeaderRaw(lastAuthHeader)
 
