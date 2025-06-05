@@ -3,12 +3,15 @@ import { ServerAPI } from "decky-frontend-lib";
 class Backend {
     public serverAPI: ServerAPI | undefined
 
-    public sunshineSendPin = async (pin: string): Promise<boolean> => {
-        const result = await this.serverAPI?.callPluginMethod<{ pin: string }, boolean>(
-            "sendPin",
-            { pin }
+    public sunshinePair = async (pin: string, client_name: string): Promise<boolean> => {
+        const result = await this.serverAPI?.callPluginMethod<{ pin: string, client_name: string }, boolean>(
+            "pair",
+            {
+                pin,
+                client_name
+            }
         );
-        console.log("[SUN]", "sendPin result", result)
+        console.log("[SUN]", "pair result", result)
         return Boolean(result?.result || false)
     }
 

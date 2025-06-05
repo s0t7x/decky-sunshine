@@ -55,10 +55,10 @@ class Plugin:
         decky_plugin.logger.info("User changed: " + str(wasUserChanged))
         return wasUserChanged
 
-    async def sendPin(self, pin):
-        decky_plugin.logger.info("Sending PIN..." + pin)
-        send = self.sunshineController.sendPin(pin)
-        decky_plugin.logger.info("PIN send " + str(send))
+    async def pair(self, pin, client_name):
+        decky_plugin.logger.info("Trying to pair with PIN " + pin + " for client " + client_name)
+        send = self.sunshineController.pair(pin, client_name)
+        decky_plugin.logger.info("Pairing returned " + str(send))
         return send
 
     async def setAuthHeader(self, username, password):
@@ -71,7 +71,7 @@ class Plugin:
         decky_plugin.logger.info("AuthHeader set")
 
     async def _main(self):
-        decky_plugin.logger.info("Decky Sunshine version: " + decky_plugin.__version__)
+        decky_plugin.logger.info("Decky Sunshine version: " + decky_plugin.DECKY_PLUGIN_VERSION)
         if self.sunshineController is None:
             self.sunshineController = SunshineController(decky_plugin.logger)
 
@@ -101,7 +101,6 @@ class Plugin:
 
         lastRunState = self.settingManager.getSetting("lastRunState", "")
         if(lastRunState == "start"):
-            time.sleep(20)
             self.sunshineController.start()
         decky_plugin.logger.info("Decky Sunshine loaded")
 
