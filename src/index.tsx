@@ -1,4 +1,4 @@
-import React, { useState, useEffect, VFC } from "react";
+import { useState, useEffect, VFC } from "react";
 import {
   ToggleField,
   definePlugin,
@@ -9,11 +9,12 @@ import {
   Navigation,
   TextField,
   QuickAccessTab,
+  showModal,
 } from "decky-frontend-lib";
 import { FaSun } from "react-icons/fa";
 import backend from "./util/backend";
 
-import { PINInput } from "./components/PINInput";
+import { PairingModal } from "./components/PairingModal";
 import { PasswordInput } from "./components/PasswordInput";
 
 const Content: VFC<{ serverAPI: any }> = ({ serverAPI }) => {
@@ -21,7 +22,6 @@ const Content: VFC<{ serverAPI: any }> = ({ serverAPI }) => {
   const [sunshineIsRunning, setSunshineIsRunning] = useState<boolean>(false);
   const [sunshineIsAuthorized, setSunshineIsAuthorized] = useState<boolean>(false);
   const [wantToggleSunshine, setWantToggleSunshine] = useState<boolean>(false);
-  const [localPin, setLocalPin] = useState("");
 
   // Function to fetch Sunshine state from the backend
   const updateSunshineState = async () => {
@@ -30,8 +30,7 @@ const Content: VFC<{ serverAPI: any }> = ({ serverAPI }) => {
 
     const running = await backend.sunshineIsRunning();
     setSunshineIsRunning(running);
-
-    setWantToggleSunshine(running)
+    setWantToggleSunshine(running);
   };
 
   useEffect(() => {
@@ -76,24 +75,35 @@ const Content: VFC<{ serverAPI: any }> = ({ serverAPI }) => {
           onChange={setWantToggleSunshine}
         />
       </PanelSectionRow>
-      {/* Render PIN input if Sunshine is authorized */}
-      {sunshineIsAuthorized ? (
-        sunshineIsRunning && (
-          <PINInput
-            value={localPin}
-            key="pin"
-            onChange={setLocalPin}
-            label="Enter PIN"
-            onSend={() => {
-              backend.sunshineSendPin(localPin);
-              setLocalPin("");
-            }}
-            sendLabel="Pair"
-          />
-        )
+      {/* If Sunshine is not running, don't show anything else.
+          Otherwise, if we're authorized, show the button for
+          the pairing modal, or show the login, if we're not
+          authorized.*/}
+      {!sunshineIsRunning ? null : sunshineIsAuthorized ? (
+          <PanelSectionRow>
+            <ButtonItem
+              onClick={() => showModal(
+                <PairingModal
+                  onPair={async (pin: string, clientName: string) =>{
+                    var success = await backend.sunshinePair(pin, clientName);
+                    // While testing, sometimes, the Sunshine process stopped when trying
+                    // to pair multiple times with a wrong PIN. Thus, it safer to update
+                    // the state again for now until we figure out what we are doing wrong
+                    // and how to handle this correctly. This only happend one time though,
+                    // so it should later be checked if it is actually necessary or helps
+                    // at all.
+                    updateSunshineState();
+                    return success;
+                    }
+                  }
+                />, window
+              )}
+            >
+              Pair
+            </ButtonItem>
+          </PanelSectionRow>
       ) : (
-        // Render login button if Sunshine is not authorized
-        sunshineIsRunning && (
+          // Render login button if Sunshine is not authorized
           <PanelSectionRow>
             <p>You need to log into Sunshine</p>
             <ButtonItem
@@ -105,7 +115,6 @@ const Content: VFC<{ serverAPI: any }> = ({ serverAPI }) => {
               Login
             </ButtonItem>
           </PanelSectionRow>
-        )
       )}
     </PanelSection>
   );

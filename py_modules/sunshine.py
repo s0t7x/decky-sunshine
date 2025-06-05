@@ -4,6 +4,7 @@ import signal
 import base64
 import json
 import ssl
+import time
 
 from urllib.request import Request, HTTPError, HTTPRedirectHandler, build_opener, HTTPSHandler
 from http.client import OK, UNAUTHORIZED
@@ -204,21 +205,50 @@ class SunshineController:
         self.killShell()
         self.killSunshine()
 
-    def sendPin(self, pin) -> bool:
+    def pair(self, pin, client_name) -> bool:
         """
-        Send a PIN to the Sunshine server.
+        Send a PIN and client name to the Sunshine server.
         :param pin: The PIN to send
-        :return: True if the PIN was accepted, False otherwise
+        :param client_name: The client_name to send
+        :return: True if the Sunshine reported a successful pairing, False otherwise
         """
-        res = self.request("/api/pin", { "pin": pin, "name": "Deck Sunshine Friendly Client Name" })
+        # /api/pin always returns true when there is a pairing request
+        # (https://github.com/LizardByte/Sunshine/issues/3944)
+        # Thus, as a workaround, we check whether the client_name
+        # is now in the list of clients. As these names
+        # do not have to be unique, i.e. a client with the given
+        # client_name could already have been in that list, we check
+        # whether there now is one more client with that name.
+        count_before = self._getCountOfClientName(client_name)
+        if count_before == -1:
+            return False
+        res = self.request("/api/pin", { "pin": pin, "name": client_name })
         if not res:
             return False
         try:
             data = json.loads(res)
-            return data["status"] == "true"
+            if data["status"] == "false":
+                return False
+            # It seems Sunshine needs a moment to update the client list,
+            # so we need to wait shortly before checking the client list again
+            time.sleep(1)
+            count_after = self._getCountOfClientName(client_name)
+            return count_after == count_before + 1
         except Exception as e:
-            self.logger.info(f"Exception when sending pin, exception: {e}")
+            self.logger.info(f"Exception when pairing, exception: {e}")
             return False
+
+    def _getCountOfClientName(self, client_name) -> int:
+        res = self.request("/api/clients/list")
+        if not res:
+            return -1
+        clients = json.loads(res)
+        if clients["status"] == "false":
+            # This should not happen in case we are authenticated,
+            # but better be safe than sorry when trying to access
+            # the named_certs
+            return -1
+        return len([client for client in clients["named_certs"] if client["name"] == client_name])
 
     def ensureDependencies(self) -> bool:
         """
