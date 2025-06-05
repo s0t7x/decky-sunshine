@@ -10,7 +10,7 @@
     </a>
 
 [![Build](https://github.com/s0t7x/decky-sunshine/actions/workflows/main.yml/badge.svg)](https://github.com/s0t7x/decky-sunshine/actions/workflows/main.yml)
-    
+
   </p>
 </div>
 
@@ -29,7 +29,7 @@ Decky Sunshine is the perfect solution for capturing your Steam Deck gameplay. W
 - Toggle the Sunshine game streaming server on/off directly from Decky's interface.
 - Easily pair new devices with Sunshine.
 - Automatic installation and setup if Sunshine is not already installed.
-- Resume last state on reboot
+- Resume last state on reboot.
 - Stream games from your Steam Deck to other devices over a local network.
 
 ## Installation
@@ -41,11 +41,11 @@ Decky Sunshine is the perfect solution for capturing your Steam Deck gameplay. W
 ## Usage
 
 1. Use the toggle button to enable or disable the Sunshine server as needed.
-2. Enter the PIN to pair new devices when prompted.
+2. When prompted to pair, use the `Pair` button to pair a new device by entering a client name and PIN.
 3. Enjoy streaming games seamlessly with Sunshine during your gaming sessions.
 
-When sunshine was already installed a sunshine user may already have been set.
-Decky Sunshine will ask for the credentials once it can't authenticate.
+When sunshine was already installed, a sunshine user may already have been set.
+Decky Sunshine will ask for the credentials once it can't authenticate. Use username `decky_sunshine` and password `decky_sunshine` if you didn't setup Sunshine manually with other credentials.
 
 ## Contributing
 
@@ -54,7 +54,5 @@ Contributions to the Decky Sunshine project are welcome! If you have any ideas f
 ## Acknowledgements
 
 Thanks to [Decky Plugin Loader](https://decky.xyz/) for being amazing.
-
-Thanks to [CameronRedmore/memory-deck](https://github.com/CameronRedmore/memory-deck) for the work on `NumpadInput` which was adapted for `PINInput.tsx`.
 
 Special thanks to the developers of Sunshine for creating the game streaming server.
