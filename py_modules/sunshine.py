@@ -172,6 +172,19 @@ class SunshineController:
         if self.isRunning():
             return True
 
+        retry_count = 60
+        wait_time = 1
+        # If Sunshine is started too early in the boot process, it won't find a display to connect to.
+        # Thus, we check whether a display is available before starting sunshine.
+        while not self._isDisplayAvailable() and retry_count > 0:
+            retry_count -= 1
+            if retry_count == 0:
+                self.logger.info("Aborting wait for display.")
+                return False
+            self.logger.info(f"No display available yet. Checking again in {wait_time} second(s)")
+            time.sleep(wait_time)
+        self.logger.info("Display available")
+
         # Set the permissions for our bwrap
         try:
             self.shellHandle = subprocess.Popen(['chown', '0:0', self.environment_variables["FLATPAK_BWRAP"]], env=self.environment_variables, user=0, stdin=subprocess.PIPE, stdout=subprocess.PIPE, preexec_fn=os.setsid)
@@ -197,6 +210,33 @@ class SunshineController:
             self.shellHandle = None
             return False
         return True
+
+    def _isDisplayAvailable(self) -> bool:
+        """
+        Check whether a display is available.
+        :return: True, if a display is available, otherwise False.
+        """
+        try:
+            result = subprocess.run(["drm_info", "-j"], capture_output=True, check=True, text=True, env=self.environment_variables)
+            data = json.loads(result.stdout)
+            for _, card in data.items():
+                for connector in card.get("crtcs", []):
+                    # Sunshine checks for the crtcs of a plane with a fb_id that is not 0.
+                    # https://github.com/LizardByte/Sunshine/blob/6ab24491ed0463eb60c8b902e018d98be3afd06b/src/platform/linux/kmsgrab.cpp#L1620
+                    # If the fb_id is 0, the crtc will be skipped.
+                    # If no crtc with an fb_id != 0 is found on all planes of a card,
+                    # the card won't be added to the available cards.
+                    # I checked the output of drm_info directly after startup where Sunshine
+                    # won't be able to start correctly and later when Sunshine would be able,
+                    # and there was no fb_id != 0 directly after start, but only later. Thus,
+                    # it should be sufficient to find a single fb_id != 0 to determine that
+                    # Sunshine should be able to find a display as well.
+                    if connector.get("fb_id", 0) != 0:
+                        return True
+            return False
+        except Exception as e:
+            self.logger.info(f"An error occurred while checking whether a display is available: {e}")
+            return False
 
     def stop(self) -> None:
         """
