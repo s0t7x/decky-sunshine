@@ -1,7 +1,7 @@
 {
   "name": "decky-sunshine",
-  "version": "0.5.0",
-  "description": "Decky plugin to easily use Sunshine streaming in Game Mode",
+  "version": "2025.10.21.1311-51cc0e0",
+  "description": "Stream your Steam Deck screen to another device with minimal effort.",
   "scripts": {
     "build": "shx rm -rf dist && rollup -c",
     "watch": "rollup -c -w",

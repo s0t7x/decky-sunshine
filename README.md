@@ -1,58 +1,115 @@
 <div align="center">
-  <img height="300px" width="auto" src="https://github.com/s0t7x/decky-sunshine/assets/11461553/bb174ec3-b6d4-499b-8eeb-43a0664b3f47" alt="Decky Sunshine Logo" />
-  <h1>Decky Sunshine Plugin</h1>
-  <p>
-    <a href="https://github.com/s0t7x/decky-sunshine/releases/latest" target="_blank">
-      <img src="https://img.shields.io/github/v/release/s0t7x/decky-sunshine?style=flat-square&include_prereleases&logo=github&_=0" alt="Release" />
-    </a>
-    <a href="https://github.com/s0t7x/decky-sunshine/issues" target="_blank">
-      <img src="https://img.shields.io/github/issues/s0t7x/decky-sunshine?style=flat-square" alt="Issues" />
-    </a>
-
-[![Build](https://github.com/s0t7x/decky-sunshine/actions/workflows/main.yml/badge.svg)](https://github.com/s0t7x/decky-sunshine/actions/workflows/main.yml)
-
-  </p>
+  <img height="220" width="auto" src="assets/Decky_Sunshine_Logo.png " alt="Decky Sunshine Logo" />
+  <h1>Decky Sunshine</h1>
+  <p>Stream your Steam Deck screen to another device with minimal effort.</p>
 </div>
 
-Decky Sunshine is the perfect solution for capturing your Steam Deck gameplay. With this plugin, you can easily toggle the Sunshine game streaming server and pair new devices, allowing you to share your gaming experiences with the world seamlessly.
+# Features
+With Decky Sunshine you can:
+- Install, set up, update, and launch the [Sunshine](https://app.lizardbyte.dev/Sunshine/) streaming server from Game Mode
+- Pair another device running the [Moonlight](https://moonlight-stream.org/) app
+- Start remote play with low latency
 
-[Getting Started with Decky Sunshine](https://github.com/s0t7x/decky-sunshine/blob/main/docs/getting_started.md)
+That’s it - easy streaming from your Steam Deck.
 
-[What exactly does all of this mean?](https://github.com/s0t7x/decky-sunshine/blob/main/docs/about.md)
+# Installation & Setup
+Follow these steps to get Decky Sunshine installed and ready.
 
-[How do I stream my SteamDeck to Twitch using my PC?](https://github.com/s0t7x/decky-sunshine/blob/main/docs/platform_streaming.md)
+## Before You Start
+Make sure:
+1. You have [Decky Loader](https://decky.xyz) installed
+2. Your Steam Deck and the other device are on the same Wi-Fi or local network
+3. Sunshine is **not** already manually installed
 
-[How to manually install Sunshine?](https://github.com/s0t7x/decky-sunshine/blob/main/docs/manual_install.md)
+## 1. Install the Plugin
+1. Open the Quick Access Menu (press the "…" / three-dots button)
+2. Go to the Decky tab (the plug symbol)
+3. Open the Decky Plugin Store
+4. Search for “Decky Sunshine”
+5. Install it
+6. Return to the Decky tab
 
-## Features
+The plugin will handle installing Sunshine automatically.
 
-- Toggle the Sunshine game streaming server on/off directly from Decky's interface.
-- Easily pair new devices with Sunshine.
-- Automatic installation and setup if Sunshine is not already installed.
-- Resume last state on reboot.
-- Stream games from your Steam Deck to other devices over a local network.
+## 2. Start Sunshine
+1. In the Decky tab, select **Decky Sunshine**
+2. Ensure the status is **Running** (it should be **Running** after the initial install)
+3. If it is **Stopped**, press `Start Sunshine`
 
-## Installation
+## 3. Install Moonlight on Your Other Device
+1. Install Moonlight from your device’s app store or [moonlight-stream.org](https://moonlight-stream.org/)
+2. Open Moonlight on your device
 
-1. Make sure [Decky Plugin loader](https://decky.xyz) is installed
-2. Open the Decky Plugin Store
-2. Search for "Decky Sunshine" and install it
+## 4. Pair the Device
 
-## Usage
+### Option A: Automatic Discovery
+1. In Moonlight, your Steam Deck should appear automatically as **steamdeck** (based on your host name)
+2. Select it
+3. Moonlight will display a PIN
 
-1. Use the toggle button to enable or disable the Sunshine server as needed.
-2. When prompted to pair, use the `Pair` button to pair a new device by entering a client name and PIN.
-3. Enjoy streaming games seamlessly with Sunshine during your gaming sessions.
+### Option B: Manual IP Entry
+1. In Moonlight, choose **Add (PC / +)**
+2. Enter your Steam Deck’s IP address
+   *(find it under Steam Deck → Settings → Internet → (your network) → Details)*
+3. Moonlight will display a PIN
 
-When sunshine was already installed, a sunshine user may already have been set.
-Decky Sunshine will ask for the credentials once it can't authenticate. Use username `decky_sunshine` and password `decky_sunshine` if you didn't setup Sunshine manually with other credentials.
+### Complete Pairing on the Deck
+1. On your Steam Deck, go to Decky → Decky Sunshine and press `Pair Client`
+2. Enter a client name (any label, e.g. `LivingRoomTV`) and the PIN shown in Moonlight
+3. Press `Pair` to confirm
 
-## Contributing
+## 5. Start Streaming
+1. In Moonlight, select **Desktop**
+2. Your Steam Deck interface will appear on the other device
+3. Play as normal - inputs will be sent back to the Deck
 
-Contributions to the Decky Sunshine project are welcome! If you have any ideas for improvements, bug fixes, or new features, feel free to open an issue or submit a pull request.
+# FAQs
+### I have an issue / the plugin does not behave as expected.
+1. First, check the other FAQ entries - your question may already be answered.
+2. If not, search the open and closed issues to see if your problem has already been reported or solved.
+2. Review the logs located at `/home/deck/homebrew/logs/decky-sunshine/`.
+3. If you still can’t resolve the issue, open an issue and describe:
+   - What happened vs. what you expected
+   - Relevant log excerpts (attach or paste them)
 
-## Acknowledgements
+### I manually installed Sunshine before. Can I still use Decky Sunshine?<a id="faq-installedBefore"></a>
+This depends on how you ran Sunshine before. If you started Sunshine as root user (e.g. using `sudo -i flatpak run`), you should be able to login using the credentials you used in your initial setup. If this does not work, you could uninstall Sunshine and delete its configuration (this includes all paired devices!) using the command `flatpak uninstall --delete-data dev.lizardbyte.app.Sunshine`, and then let Decky Sunshine install and setup Sunshine. You could also try setting a username and password for the root user (see the [Sunshine documentation about forgotten credentials](https://docs.lizardbyte.dev/projects/sunshine/master/md_docs_2troubleshooting.html#forgotten-credentials)).
 
-Thanks to [Decky Plugin Loader](https://decky.xyz/) for being amazing.
+### Will you add feature X?
+The goal of this plugin is to simplify setting up Sunshine in Game Mode and pairing Moonlight clients.
+If your idea supports that, feel free to open an issue. Features outside this goal will probably not be implemented, since they take development time and ongoing maintenance.
 
-Special thanks to the developers of Sunshine for creating the game streaming server.
+### I want to change a setting in Sunshine. Will you add a feature for that?
+If the setting improves the experience for many users, open an issue to discuss.
+Otherwise, just adjust it in **Sunshine’s Web UI** using the credentials displayed after clicking the `Show credentials` button.
+
+### How can I see the Steam overlays on my device while playing?
+You can stream the Steam overlays (three-dots / "STEAM" button menus) by enabling a developer setting. This may cause visual or performance issues; revert if you notice problems.
+
+1. Press the STEAM button.
+2. Open Settings.
+3. Under System, enable Developer Mode (a Developer tab appears at the end).
+4. Open Developer.
+5. Enable Force Composite.
+6. Restart your stream if it is already running.
+
+To undo this, disable Force Composite.
+
+### The plugin asks for credentials.
+If you manually installed Sunshine before, see [the related FAQ entry](#faq-installedBefore).
+If you changed your Sunshine credentials e.g. from Sunshine's Web UI, enter these credentials.
+
+### I want to install a nightly version. How can I do that?
+To install a nightly (or specific) version:
+1. Open the Decky tab and press the cog to open Decky Loader settings.
+2. In General, enable Developer mode (under OTHER).
+3. Open the new Developer tab.
+4. Either:
+    - Download the desired ZIP to your Steam Deck, then use Browse under Install Plugin from ZIP File, or
+    - Enter the direct ZIP URL in Install Plugin from URL and press Install.
+
+# Contributing
+Ideas, issues, and improvements are welcome - open an issue or PR.
+
+# Thanks
+Thanks to the **Decky Loader**, **Sunshine**, and **Moonlight** projects for making this possible.

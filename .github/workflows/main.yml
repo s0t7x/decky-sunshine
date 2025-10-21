@@ -10,34 +10,20 @@ permissions:
 jobs:
   bundle:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./
     steps:
-      - name: Check out the repository to the runner
-        uses: actions/checkout@v4  
+      - name: Check out
+        uses: actions/checkout@v4
       - name: Run setup
         run: ./.vscode/setup.sh
       - name: Run build
         id: build
         run: ./.vscode/build.sh
-      - name: Get current date
-        id: date
-        uses: Kaven-Universe/github-action-current-date-time@v1
-        with:
-          format: "YYYYMMDD-HHmmss"
-      - name: Check Tag
-        env:
-          NAME: "nightly-${{ steps.date.outputs.time }}"
-        run: echo "$NAME"
       - name: Nightly Release
         if: steps.build.outcome == 'success'
-        env:
-          NAME: "nightly-${{ steps.date.outputs.time }}"
         uses: softprops/action-gh-release@v2
         with:
           prerelease: true
           generate_release_notes: true
-          name: ${{ env.NAME }}
-          tag_name: ${{ env.NAME }}
-          files: "./out/Decky\ Sunshine.zip"
+          name: v${{ steps.build.outputs.version }}
+          tag_name: v${{ steps.build.outputs.version }}
+          files: "./out/Decky\\ Sunshine.zip"
