@@ -12,23 +12,23 @@ export const PairingModal: VFC<{
       }) => {
     const [pin, setPin] = useState("");
     const [clientName, setClientName] = useState("");
-    const [wasPairingSucessful, setWasPairingSucessful ] = useState<boolean | null>(null);
+    const [wasPairingSuccessfull, setWasPairingSucessfull ] = useState<boolean | null>(null);
     const [isWaitingForResponse, setIsWaitingForResponse ] = useState(false);
 
-    const pair = async () => {
+    const tryPair = async () => {
       playSound("https://steamloopback.host/sounds/deck_ui_side_menu_fly_in.wav");
       setIsWaitingForResponse(true)
       const success = await onPair(pin, clientName);
-      setIsWaitingForResponse(false)
-      setWasPairingSucessful(success);
       if (success){
         closeModal?.()
       }
+      setIsWaitingForResponse(false);
+      setWasPairingSucessfull(success);
     }
 
     const handlePINChange = (e: ChangeEvent<HTMLInputElement>) => {
       if (/^\d{0,4}$/.test(e.currentTarget.value)) {
-        setWasPairingSucessful(null);
+        setWasPairingSucessfull(null);
         setPin(e.currentTarget.value);
       }
     }
@@ -38,22 +38,26 @@ export const PairingModal: VFC<{
         <Field label="Client name">
           <TextField
             value={clientName}
-            style={{ width: '20em' }}
+            style={{ width: '25em' }}
             description="A name for the client / device you want to pair"
+            bShowClearAction={clientName.length > 0}
             onChange={(e) => setClientName(e.target.value)}
           />
         </Field>
         <Field label="PIN">
           <TextField
             value={pin}
-            style={{ width: '3em' }}
+            style={{ width: '25em' }}
             description="The PIN as shown on the client / device you want to pair (4 digits)"
+            bShowClearAction={pin.length > 0}
+            mustBeNumeric={true}
             onChange={handlePINChange} />
         </Field>
-        <DialogButton disabled={ pin.length < 4 || clientName.length < 1 || wasPairingSucessful === false || isWaitingForResponse == true } onClick={() => pair()} style={{ backgroundColor: wasPairingSucessful === null ? "green" : "red" }}>
-          {wasPairingSucessful === null
-            ? isWaitingForResponse ? "Waiting for response..." : "Pair"
-            : "Pairing failed"}</DialogButton>
+        {isWaitingForResponse && <span>Waiting for response...</span>}
+        {wasPairingSuccessfull === false && <span style={{ color: 'red' }}>Pairing failed. Please try again.</span>}
+        <DialogButton onClick={() => tryPair()} disabled={ pin.length < 4 || clientName.length < 1 || isWaitingForResponse == true }>
+          Pair
+        </DialogButton>
       </ModalRoot>
     );
 };

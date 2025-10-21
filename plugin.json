@@ -4,7 +4,7 @@
   "flags": ["root"],
   "publish": {
     "tags": ["root", "streaming", "moonlight", "sunshine", "server"],
-    "description": "Decky plugin to integrate Sunshine server into game mode.",
-    "image": "https://opengraph.githubassets.com/1/s0t7x/decky-sunshine"
+    "description": "Stream your Steam Deck screen to another device with minimal effort.",
+    "image": "https://raw.githubusercontent.com/s0t7x/decky-sunshine/main/assets/Decky_Sunshine_Logo.png"
   }
 }
