@@ -3,21 +3,22 @@ set -euo pipefail
 
 CLI_LOCATION="$(pwd)/cli"
 
-# Calendar version (UTC): yyyy.mm.dd.HHMM
-BASE_VERSION="$(date -u +%Y.%m.%d.%H%M)"
-
-# Short git commit id (works in GitHub Actions; may fall back locally)
-SHORT_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo "local")"
-
-# Final version with commit id
-NEW_VERSION="${BASE_VERSION}-${SHORT_SHA}"
-echo "New version: $NEW_VERSION (base: $BASE_VERSION, commit: $SHORT_SHA)"
-
-# Update package.json
-tmpfile="$(mktemp)"
-jq --arg v "$NEW_VERSION" '.version = $v' package.json > "$tmpfile"
-mv "$tmpfile" package.json
-echo "version in package.json updated to $NEW_VERSION"
+if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
+  # Use committed version
+  PKG_VERSION="$(jq -r '.version' package.json)"
+  echo "Using committed version: $PKG_VERSION"
+  NEW_VERSION="$PKG_VERSION"
+else
+  # Local dev build - generate version
+  BASE_VERSION="$(date -u +%Y.%m.%d.%H%M)"
+  SHORT_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo "local")"
+  NEW_VERSION="${BASE_VERSION}-${SHORT_SHA}"
+  echo "Local dev version: $NEW_VERSION"
+  tmpfile="$(mktemp)"
+  jq --arg v "$NEW_VERSION" '.version = $v' package.json > "$tmpfile"
+  mv "$tmpfile" package.json
+  echo "version in package.json updated to $NEW_VERSION"
+fi
 
 echo "Building plugin in $(pwd)"
 sudo "$CLI_LOCATION/decky" plugin build "$(pwd)"
