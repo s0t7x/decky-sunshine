@@ -13,17 +13,39 @@ jobs:
     steps:
       - name: Check out
         uses: actions/checkout@v4
+
+      - name: Set version (commit date-sha)
+        id: version
+        run: |
+          DATE_PART="$(date -u +%Y.%m.%d)"
+          SHORT_SHA="$(git rev-parse --short HEAD)"
+          NEW_VERSION="${DATE_PART}-${SHORT_SHA}"
+          CURRENT="$(jq -r '.version' package.json || echo '')"
+          if [ "$CURRENT" != "$NEW_VERSION" ]; then
+            tmpfile="$(mktemp)"
+            jq --arg v "$NEW_VERSION" '.version = $v' package.json > "$tmpfile"
+            mv "$tmpfile" package.json
+            git config user.name "github-actions"
+            git config user.email "github-actions@users.noreply.github.com"
+            git add package.json
+            git commit -m "chore: update version to $NEW_VERSION" || true
+            git push
+          fi
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Run setup
         run: ./.vscode/setup.sh
+
       - name: Run build
         id: build
         run: ./.vscode/build.sh
+
       - name: Nightly Release
         if: steps.build.outcome == 'success'
         uses: softprops/action-gh-release@v2
         with:
           prerelease: true
           generate_release_notes: true
-          name: v${{ steps.build.outputs.version }}
-          tag_name: v${{ steps.build.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          tag_name: v${{ steps.version.outputs.version }}
           files: "./out/Decky\\ Sunshine.zip"
