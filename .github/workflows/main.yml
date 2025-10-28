@@ -3,6 +3,17 @@ on:
   push:
     branches:
       - main
+    # Ignore pushes that only modify non-code artifacts
+    paths-ignore:
+      - 'README.md'
+      - 'LICENSE'
+      - 'docs/**'
+      - 'assets/**'
+      - '.github/**'
+      - '.gitignore'
+      - '.gitattributes'
+  # Allow manual runs regardless of changed paths
+  workflow_dispatch:
 
 permissions:
   contents: write

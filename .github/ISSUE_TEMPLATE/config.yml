@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Decky Sunshine FAQ (README)
+    url: https://github.com/s0t7x/decky-sunshine#faqs
+    about: Read common answers (pairing, credentials, overlays) before opening an issue.
+  - name: Sunshine Documentation
+    url: https://docs.lizardbyte.dev/projects/sunshine/master/
+    about: Troubleshoot Sunshine-specific configuration issues.
+  - name: Moonlight Documentation
+    url: https://moonlight-stream.org/
+    about: Client-side streaming or pairing issues that occur outside the plugin.
+  - name: Decky Loader
+    url: https://decky.xyz/
+    about: Problems with the Decky Loader itself.

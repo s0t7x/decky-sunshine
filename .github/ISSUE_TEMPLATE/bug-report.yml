@@ -1,0 +1,119 @@
+name: Bug report
+description: Something isn't working as expected in Decky Sunshine.
+title: "[Bug] <Brief summary>"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a problem. Please fill in what you can; skip anything you truly don't know.
+        Never include passwords or Sunshine credentials. Redact any information you deem sensitive.
+        Before submitting, please quickly read the FAQ section in the README (Decky Sunshine repository) - many common pairing, credential, and overlay questions are answered there. If one applies, mention what you tried.
+
+  - type: input
+    id: summary
+    attributes:
+      label: Short summary
+      description: One sentence describing the problem.
+      placeholder: Pairing fails with PIN error
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: Describe what you experienced. Include any on-screen error messages.
+      placeholder: |
+        After pressing "Pair Client" and entering the PIN, the modal spins for ~10s then shows "Pairing failed. Please try again." even though the PIN matches Moonlight.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: Describe what you thought would happen instead.
+      placeholder: Sunshine should accept the PIN and list the new client.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps help us recreate the issue.
+      placeholder: |
+        1. Open Moonlight on Android phone
+        2. Device appears as steamdeck; select it
+        3. PIN shown in Moonlight
+        4. In plugin, click Pair Client, enter name + PIN, click Pair
+        5. Error appears after ~10s
+    validations:
+      required: true
+
+  - type: input
+    id: pluginVersion
+    attributes:
+      label: Decky Sunshine plugin version
+      description: Shown in the Plugin Store, plugin details or logs.
+      placeholder: e.g. 2025.10.15-abc123
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: mandatory_checks
+    attributes:
+      label: Confirm you've done these BEFORE opening the issue
+      description: These steps avoid duplicates and give essential context.
+      options:
+        - label: I've read the FAQ in README
+          required: true
+        - label: I've searched existing open & closed issues
+          required: true
+        - label: I've collected & looked into the log files from /home/deck/homebrew/logs/decky-sunshine/
+          required: true
+
+  - type: checkboxes
+    id: optional_troubleshooting
+    attributes:
+      label: Optional helpful troubleshooting already tried
+      description: Not required, but helps narrow root cause.
+      options:
+        - label: Verified Sunshine shows Running in plugin
+        - label: Tested with another client device
+        - label: Restarted the Steam Deck
+        - label: Made sure the plugin is up to date
+        - label: Reinstalled the plugin
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log excerpts + attachment
+      description: |
+        Please attach the FULL relevant log file(s) if possible (drag & drop or use the attachment button after submitting the issue) from
+        /home/deck/homebrew/logs/decky-sunshine/ so we can follow the sequence of events.
+        Then paste only the most relevant 5-20 lines here (error/warning + surrounding context) to make it immediately visible.
+        If you cannot attach, paste the whole log here.
+        Do NOT include credentials or passwords, and feel free to mask any information you deem sensitive (they shouldn't be part of the logs anyways, though).
+      placeholder: |
+        Attached: decky-sunshine.log (full file)
+        Excerpt:
+        [2025-10-23 21:48:46,254][INFO] Trying to pair with PIN 5846 for client TV
+        [2025-10-23 21:48:46,502][ERROR] Failed to send PIN and client name to Sunshine
+        [2025-10-23 21:48:46,753][INFO] Pairing returned False
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context / screenshots
+      description: Optional extra info, screenshots, network peculiarities, etc.
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: |
+        Thank you!

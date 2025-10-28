@@ -1,0 +1,84 @@
+name: Feature request
+description: Suggest an improvement that fits the plugin's core goal (easy Sunshine setup + pairing).
+title: "[Feature] <Brief summary>"
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The plugin keeps a narrow focus: install/update Sunshine, show credentials, help pairing, start remote play. Requests outside this scope may be declined to reduce maintenance burden.
+        Before suggesting a feature, skim the README FAQ - it might already describe a way to achieve what you want (e.g. using Sunshine's Web UI or developer settings). If so, note what you found and why it isn't sufficient.
+
+  - type: input
+    id: summary
+    attributes:
+      label: Short summary
+      placeholder: Auto-detect failed pairings and show a retry tip
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or user need
+      description: What user pain or friction does this address?
+      placeholder: |
+        New users sometimes enter the PIN too late; the plugin gives no feedback and they don't know to retry.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution / behavior
+      description: Describe what you'd like to see.
+      placeholder: |
+        Detect a PIN timeout and show a tooltip suggesting to reopen Moonlight to generate a fresh PIN.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope fit (check those that apply)
+      options:
+        - label: Simplifies installing/updating Sunshine
+        - label: Simplifies pairing a client
+        - label: Simplifies launching / starting remote play
+        - label: Improves clarity of credentials or status
+        - label: Reduces user confusion / common FAQ item
+
+  - type: textarea
+    id: benefits
+    attributes:
+      label: Benefits / impact
+      description: Who benefits and how?
+      placeholder: |
+        Reduces pairing frustration for first-time users; fewer support issues opened.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other ways to solve this (even if inferior).
+      placeholder: |
+        FAQ entry alone; adding a link to external docs.
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Mockups, wording ideas, related issues (#123), etc.
+      placeholder: |
+        Could reuse existing status polling to infer a pairing failure.
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: |
+        Thanks! We may ask follow-up questions to clarify scope. Large changes could be declined if they increase maintenance or drift from the plugin's core purpose.
