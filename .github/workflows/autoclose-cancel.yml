@@ -1,0 +1,34 @@
+name: Cancel autoclose on new comment
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  cancel-autoclose:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Remove autoclose label if present
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Extract labels from payload (works for issue comments)
+            const issue = context.payload.issue || {};
+            const issueLabels = (issue.labels || []).map(l => l.name);
+            const autocloseLabels = issueLabels.filter(l => l.startsWith('autoclose-'));
+
+            if (autocloseLabels.length > 0) {
+              for (const label of autocloseLabels) {
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: issue.number,
+                    name: label
+                  });
+                } catch (err) {
+                  // ignore failures (label might already be gone)
+                }
+              }
+            }

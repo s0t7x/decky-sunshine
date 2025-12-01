@@ -1,0 +1,63 @@
+name: Handle /autoclose command
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  handle-command:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Parse /autoclose duration and compute close date
+        id: parse
+        run: |
+          set -euo pipefail
+          BODY="${{ github.event.comment.body }}"
+
+          # Find first occurrence of "/autoclose <number>w" anywhere in the comment
+          CMD=$(echo "$BODY" | grep -oE '/autoclose[[:space:]]*[0-9]+w' | head -n1 || true)
+
+          if [ -z "$CMD" ]; then
+            # No explicit /autoclose found -> mark as not found
+            echo "found=false" >> $GITHUB_OUTPUT
+            echo "weeks=" >> $GITHUB_OUTPUT
+            echo "close_date=" >> $GITHUB_OUTPUT
+            echo "plural=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          WEEKS=$(echo "$CMD" | grep -oE '[0-9]+' || true)
+          if [ -z "$WEEKS" ]; then
+            WEEKS=4
+          fi
+
+          # Compute closing date (friendly format, e.g., "Dec 17, 2025")
+          CLOSE_DATE=$(date -d "+${WEEKS} weeks" +'%b %d, %Y')
+
+          if [ "$WEEKS" -eq 1 ]; then
+            PLURAL=""
+          else
+            PLURAL="s"
+          fi
+
+          echo "found=true" >> $GITHUB_OUTPUT
+          echo "weeks=$WEEKS" >> $GITHUB_OUTPUT
+          echo "close_date=$CLOSE_DATE" >> $GITHUB_OUTPUT
+          echo "plural=$PLURAL" >> $GITHUB_OUTPUT
+
+      - name: Add confirmation comment with exact close date
+        if: steps.parse.outputs.found == 'true'
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.issue.number }}
+          body: |
+            ⏳ Auto-close scheduled in **${{ steps.parse.outputs.weeks }} week${{ steps.parse.outputs.plural }}**.
+            This issue will be closed automatically on ${{ steps.parse.outputs.close_date }} if there is no further activity.
+
+      - name: Add autoclose label (weeks-based)
+        if: steps.parse.outputs.found == 'true'
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          labels: autoclose-${{ steps.parse.outputs.weeks }}w
