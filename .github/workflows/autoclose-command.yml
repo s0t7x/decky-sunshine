@@ -13,23 +13,25 @@ jobs:
     steps:
       - name: Determine weeks and whether to proceed
         id: parse
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          LABEL_NAME: ${{ github.event.label.name }}
         run: |
           FOUND=false
           WEEKS=""
           # Case 1: Comment contains /autoclose
-          if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
-            BODY="${{ github.event.comment.body }}"
-            MATCH=$(echo "$BODY" | grep -oE '/autoclose([[:space:]]+[0-9]+w)?' | head -n1)
+          if [[ "$EVENT_NAME" == "issue_comment" ]]; then
+            MATCH=$(echo "$COMMENT_BODY" | grep -oE '/autoclose([[:space:]]+[0-9]+w)?' | head -n1 || true)
             if [[ -n "$MATCH" ]]; then
               FOUND=true
-              WEEKS=$(echo "$MATCH" | grep -oE '[0-9]+')
+              WEEKS=$(echo "$MATCH" | grep -oE '[0-9]+' || true)
             fi
           fi
 
           # Case 2: Manual label added
-          if [[ "${{ github.event_name }}" == "issues" ]]; then
-            LABEL="${{ github.event.label.name }}"
-            if [[ "$LABEL" =~ autoclose-([0-9]+)w ]]; then
+          if [[ "$EVENT_NAME" == "issues" ]]; then
+            if [[ "$LABEL_NAME" =~ autoclose-([0-9]+)w ]]; then
               FOUND=true
               WEEKS="${BASH_REMATCH[1]}"
             fi

@@ -11,9 +11,10 @@ jobs:
     steps:
       - name: Skip if comment contains /autoclose
         id: check
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
-          BODY="${{ github.event.comment.body }}"
-          if echo "$BODY" | grep -q '/autoclose'; then
+          if echo "$COMMENT_BODY" | grep -q '/autoclose'; then
             echo "skip=true" >> $GITHUB_OUTPUT
           else
             echo "skip=false" >> $GITHUB_OUTPUT
