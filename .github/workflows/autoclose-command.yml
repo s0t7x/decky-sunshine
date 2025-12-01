@@ -1,63 +1,93 @@
-name: Handle /autoclose command
+name: Handle /autoclose command or manual label
 on:
   issue_comment:
     types: [created]
+  issues:
+    types: [labeled]
 
 jobs:
-  handle-command:
+  handle-autoclose:
     runs-on: ubuntu-latest
     permissions:
       issues: write
     steps:
-      - name: Parse /autoclose duration and compute close date
+      - name: Determine weeks and whether to proceed
         id: parse
         run: |
-          set -euo pipefail
-          BODY="${{ github.event.comment.body }}"
-
-          # Find first occurrence of "/autoclose <number>w" anywhere in the comment
-          CMD=$(echo "$BODY" | grep -oE '/autoclose[[:space:]]*[0-9]+w' | head -n1 || true)
-
-          if [ -z "$CMD" ]; then
-            # No explicit /autoclose found -> mark as not found
-            echo "found=false" >> $GITHUB_OUTPUT
-            echo "weeks=" >> $GITHUB_OUTPUT
-            echo "close_date=" >> $GITHUB_OUTPUT
-            echo "plural=" >> $GITHUB_OUTPUT
-            exit 0
+          FOUND=false
+          WEEKS=""
+          # Case 1: Comment contains /autoclose
+          if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
+            BODY="${{ github.event.comment.body }}"
+            MATCH=$(echo "$BODY" | grep -oE '/autoclose([[:space:]]+[0-9]+w)?' | head -n1)
+            if [[ -n "$MATCH" ]]; then
+              FOUND=true
+              WEEKS=$(echo "$MATCH" | grep -oE '[0-9]+')
+            fi
           fi
 
-          WEEKS=$(echo "$CMD" | grep -oE '[0-9]+' || true)
-          if [ -z "$WEEKS" ]; then
-            WEEKS=4
+          # Case 2: Manual label added
+          if [[ "${{ github.event_name }}" == "issues" ]]; then
+            LABEL="${{ github.event.label.name }}"
+            if [[ "$LABEL" =~ autoclose-([0-9]+)w ]]; then
+              FOUND=true
+              WEEKS="${BASH_REMATCH[1]}"
+            fi
           fi
 
-          # Compute closing date (friendly format, e.g., "Dec 17, 2025")
-          CLOSE_DATE=$(date -d "+${WEEKS} weeks" +'%b %d, %Y')
-
-          if [ "$WEEKS" -eq 1 ]; then
-            PLURAL=""
+          # Compute closing date
+          if $FOUND; then
+            # Default to 4 weeks if no number provided
+            if [ -z "$WEEKS" ]; then
+              WEEKS=4
+            fi
+            CLOSE_DATE=$(date -d "+${WEEKS} weeks" +'%b %d, %Y')
+            if [ "$WEEKS" -eq 1 ]; then
+              PLURAL=""
+            else
+              PLURAL="s"
+            fi
           else
-            PLURAL="s"
+            CLOSE_DATE=""
+            PLURAL=""
           fi
 
-          echo "found=true" >> $GITHUB_OUTPUT
+          echo "found=$FOUND" >> $GITHUB_OUTPUT
           echo "weeks=$WEEKS" >> $GITHUB_OUTPUT
           echo "close_date=$CLOSE_DATE" >> $GITHUB_OUTPUT
           echo "plural=$PLURAL" >> $GITHUB_OUTPUT
 
-      - name: Add confirmation comment with exact close date
+      - name: Remove existing autoclose labels (only if different)
+        if: steps.parse.outputs.found == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue_number = context.payload.issue.number;
+            const newLabel = `autoclose-${{ steps.parse.outputs.weeks }}w`;
+            const labels = (context.payload.issue.labels || []).map(l => l.name);
+            for (const label of labels) {
+              if (label.startsWith('autoclose-') && label !== newLabel) {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number,
+                  name: label
+                });
+              }
+            }
+
+      - name: Add new autoclose label
+        if: steps.parse.outputs.found == 'true'
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          labels: autoclose-${{ steps.parse.outputs.weeks }}w
+
+      - name: Post confirmation comment
         if: steps.parse.outputs.found == 'true'
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.issue.number }}
           body: |
             ⏳ Auto-close scheduled in **${{ steps.parse.outputs.weeks }} week${{ steps.parse.outputs.plural }}**.
-            This issue will be closed automatically on ${{ steps.parse.outputs.close_date }} if there is no further activity.
-
-      - name: Add autoclose label (weeks-based)
-        if: steps.parse.outputs.found == 'true'
-        uses: actions-ecosystem/action-add-labels@v1
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          labels: autoclose-${{ steps.parse.outputs.weeks }}w
+            The issue will now be closed automatically on ${{ steps.parse.outputs.close_date }} if there is no further activity.

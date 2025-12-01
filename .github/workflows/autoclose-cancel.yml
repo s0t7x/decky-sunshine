@@ -9,7 +9,18 @@ jobs:
     permissions:
       issues: write
     steps:
+      - name: Skip if comment contains /autoclose
+        id: check
+        run: |
+          BODY="${{ github.event.comment.body }}"
+          if echo "$BODY" | grep -q '/autoclose'; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Remove autoclose label if present
+        if: steps.check.outputs.skip == 'false'
         uses: actions/github-script@v7
         with:
           script: |
