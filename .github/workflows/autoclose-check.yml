@@ -37,12 +37,15 @@ jobs:
               for (const issue of issues) {
                 const lastUpdated = new Date(issue.updated_at);
                 if (lastUpdated < cutoff) {
+                  // 1. Create NEW "Closed" comment (no marker) for notification
                   await github.rest.issues.createComment({
                     owner,
                     repo,
                     issue_number: issue.number,
                     body: `🔒 Closing this issue due to no feedback after ${weeks} week${weeks > 1 ? 's' : ''}. Feel free to reopen if needed.`
                   });
+
+                  // 2. Close the issue
                   await github.rest.issues.update({
                     owner,
                     repo,

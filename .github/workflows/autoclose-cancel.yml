@@ -44,3 +44,26 @@ jobs:
                 }
               }
             }
+
+      - name: Find existing autoclose comment
+        if: steps.check.outputs.skip == 'false'
+        uses: peter-evans/find-comment@v3
+        id: fc
+        with:
+          issue-number: ${{ github.event.issue.number }}
+          body-includes: <!-- autoclose-status -->
+
+      - name: Delete autoclose comment
+        if: steps.check.outputs.skip == 'false' && steps.fc.outputs.comment-id != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await github.rest.issues.deleteComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: ${{ steps.fc.outputs.comment-id }}
+              });
+            } catch (err) {
+              console.log(`Error deleting comment: ${err.message}`);
+            }
