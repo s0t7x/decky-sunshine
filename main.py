@@ -142,17 +142,6 @@ class Plugin:
 
         lastRunState = self.settingManager.getSetting("lastRunState", "")
         if lastRunState in ("start", ""):
-            try:
-                with open('/proc/uptime', 'r') as f:
-                    uptime_seconds = float(f.readline().split()[0])
-                if uptime_seconds < 120:
-                    decky.logger.info(f"Detected fresh boot (uptime: {uptime_seconds}s). Waiting 15s for audio services...")
-                    await asyncio.sleep(15)
-                else:
-                    decky.logger.info(f"System up for {uptime_seconds}s. Skipping start delay.")
-            except Exception as e:
-                decky.logger.error(f"Error in smart delay logic: {e}")
-
             decky.logger.info("Starting Sunshine")
             await self.sunshineController.start_async()
 
