@@ -180,9 +180,12 @@ class SunshineController:
         # If Sunshine is started too early in the boot process, it won't find a display to connect to
         # or the audio subsystem may not be ready. Thus, we check whether both are available before
         # starting sunshine.
-        while (not self._isDisplayAvailable() or not self._isAudioAvailable()) and retry_count > 0:
+        while retry_count > 0:
             display_available = self._isDisplayAvailable()
             audio_available = self._isAudioAvailable()
+
+            if display_available and audio_available:
+                break
 
             retry_count -= 1
             if retry_count == 0:
@@ -200,9 +203,9 @@ class SunshineController:
 
             await asyncio.sleep(wait_time)
 
-        if self._isDisplayAvailable() and self._isAudioAvailable():
+        if display_available and audio_available:
             self.logger.info("Display and audio subsystem available")
-        elif self._isDisplayAvailable():
+        elif display_available:
             self.logger.info("Display available")
 
         # Set the permissions for our bwrap
@@ -554,16 +557,20 @@ class SunshineController:
         """
         import socket
 
-        # Check if the PulseAudio/PipeWire socket exists and is accessible
-        pulse_socket = self.environment_variables.get("PULSE_SERVER", "unix:/run/user/1000/pulse/native")
+        # Dynamically search for the socket each time, as it may not exist during cold boot
+        pulse_socket_uri = self._findPulseAudioSocket()
+        
+        # Update the environment variable if a different socket was found
+        if pulse_socket_uri != self.environment_variables.get("PULSE_SERVER"):
+            self.environment_variables["PULSE_SERVER"] = pulse_socket_uri
+            self.logger.info(f"Updated PULSE_SERVER to: {pulse_socket_uri}")
 
         # Remove the "unix:" prefix if present
-        if pulse_socket.startswith("unix:"):
-            pulse_socket = pulse_socket[5:]
+        pulse_socket = pulse_socket_uri[5:] if pulse_socket_uri.startswith("unix:") else pulse_socket_uri
 
         # Check if the socket file exists
         if not os.path.exists(pulse_socket):
-            self.logger.info(f"Audio socket does not exist: {pulse_socket}")
+            self.logger.debug(f"Audio socket does not exist: {pulse_socket}")
             return False
 
         # Try to connect to the socket to verify it's actually working
@@ -574,7 +581,7 @@ class SunshineController:
             sock.close()
             return True
         except (socket.error, OSError) as e:
-            self.logger.info(f"Cannot connect to audio socket {pulse_socket}: {e}")
+            self.logger.debug(f"Cannot connect to audio socket {pulse_socket}: {e}")
             return False
         except Exception as e:
             self.logger.exception(f"Unexpected error checking audio availability", exc_info=e)
