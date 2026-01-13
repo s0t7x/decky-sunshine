@@ -74,7 +74,7 @@ class SunshineController:
         self.opener = build_opener(NoRedirect(), HTTPSHandler(context=sslContext))
 
         self.environment_variables = os.environ.copy()
-        self.environment_variables["PULSE_SERVER"] = "unix:/run/user/1000/pulse/native"
+        self.environment_variables["PULSE_SERVER"] = self._findPulseAudioSocket()
         self.environment_variables["DISPLAY"] = ":0"
         self.environment_variables["FLATPAK_BWRAP"] = self.environment_variables.get("DECKY_PLUGIN_RUNTIME_DIR", "") + "/bwrap"
         self.environment_variables["LD_LIBRARY_PATH"] = "/usr/lib/:" + self.environment_variables.get("LD_LIBRARY_PATH", "")
@@ -176,14 +176,14 @@ class SunshineController:
 
         retry_count = 60
         wait_time = 1
-        
+
         # If Sunshine is started too early in the boot process, it won't find a display to connect to
         # or the audio subsystem may not be ready. Thus, we check whether both are available before
         # starting sunshine.
         while (not self._isDisplayAvailable() or not self._isAudioAvailable()) and retry_count > 0:
             display_available = self._isDisplayAvailable()
             audio_available = self._isAudioAvailable()
-            
+
             retry_count -= 1
             if retry_count == 0:
                 if not display_available:
@@ -192,14 +192,14 @@ class SunshineController:
                 if not audio_available:
                     self.logger.warning("Audio subsystem not available after waiting. Starting Sunshine anyway...")
                 break
-            
+
             if not display_available:
                 self.logger.info(f"No display available yet. Checking again in {wait_time} {'second' if wait_time == 1 else 'seconds'}")
             if not audio_available:
                 self.logger.info(f"Audio subsystem not available yet. Checking again in {wait_time} {'second' if wait_time == 1 else 'seconds'}")
-            
+
             await asyncio.sleep(wait_time)
-        
+
         if self._isDisplayAvailable() and self._isAudioAvailable():
             self.logger.info("Display and audio subsystem available")
         elif self._isDisplayAvailable():
@@ -456,6 +456,66 @@ class SunshineController:
             request.data = json.dumps(data).encode('utf-8')
         return request
 
+    def _findPulseAudioSocket(self) -> str:
+        """
+        Find the PulseAudio/PipeWire socket path.
+        Searches common locations and returns the first valid socket found.
+        :return: The socket path in the format "unix:/path/to/socket", or a default path if not found
+        """
+        import glob
+        import pwd
+
+        # Try to get XDG_RUNTIME_DIR first, which is the standard location
+        xdg_runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
+
+        # Build socket patterns to check (in order of preference)
+        socket_patterns = []
+
+        # If XDG_RUNTIME_DIR is set and it's not root's directory, prioritize it
+        if xdg_runtime_dir and '/run/user/0' not in xdg_runtime_dir:
+            socket_patterns.extend([
+                f"{xdg_runtime_dir}/pulse/native",
+                f"{xdg_runtime_dir}/pipewire-0",
+            ])
+
+        # Try to find the deck user's UID
+        deck_uid = None
+        try:
+            deck_user = pwd.getpwnam('deck')
+            deck_uid = deck_user.pw_uid
+            socket_patterns.extend([
+                f"/run/user/{deck_uid}/pulse/native",
+                f"/run/user/{deck_uid}/pipewire-0",
+            ])
+        except KeyError:
+            pass
+
+        # Search all /run/user/*/pulse/native and /run/user/*/pipewire-0 directories
+        # This will find sockets for any user (1000, 1001, etc.)
+        socket_patterns.extend([
+            "/run/user/*/pulse/native",
+            "/run/user/*/pipewire-0",
+            "/tmp/pulse-*/native",
+        ])
+
+        for pattern in socket_patterns:
+            # Use glob to expand wildcards
+            matches = glob.glob(pattern) if '*' in pattern else [pattern]
+            for socket_path in matches:
+                # Skip root user's socket (uid 0)
+                if '/run/user/0/' in socket_path:
+                    continue
+                if os.path.exists(socket_path):
+                    self.logger.info(f"Found PulseAudio socket at: {socket_path}")
+                    return f"unix:{socket_path}"
+
+        # If no socket found, return a default path
+        # Try to use deck user's UID if found, otherwise use 1000
+        default_uid = deck_uid if deck_uid else 1000
+        default_socket = f"unix:/run/user/{default_uid}/pulse/native"
+        self.logger.warning(f"No PulseAudio socket found, using default: {default_socket}")
+        return default_socket
+
     def _isDisplayAvailable(self) -> bool:
         """
         Check whether a display is available.
@@ -493,19 +553,19 @@ class SunshineController:
         :return: True if audio is available, otherwise False.
         """
         import socket
-        
+
         # Check if the PulseAudio/PipeWire socket exists and is accessible
         pulse_socket = self.environment_variables.get("PULSE_SERVER", "unix:/run/user/1000/pulse/native")
-        
+
         # Remove the "unix:" prefix if present
         if pulse_socket.startswith("unix:"):
             pulse_socket = pulse_socket[5:]
-        
+
         # Check if the socket file exists
         if not os.path.exists(pulse_socket):
-            self.logger.debug(f"Audio socket does not exist: {pulse_socket}")
+            self.logger.info(f"Audio socket does not exist: {pulse_socket}")
             return False
-        
+
         # Try to connect to the socket to verify it's actually working
         try:
             sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -514,7 +574,7 @@ class SunshineController:
             sock.close()
             return True
         except (socket.error, OSError) as e:
-            self.logger.debug(f"Cannot connect to audio socket {pulse_socket}: {e}")
+            self.logger.info(f"Cannot connect to audio socket {pulse_socket}: {e}")
             return False
         except Exception as e:
             self.logger.exception(f"Unexpected error checking audio availability", exc_info=e)
