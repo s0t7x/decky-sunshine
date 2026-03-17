@@ -22,7 +22,15 @@ jobs:
           WEEKS=""
           # Case 1: Comment contains /autoclose
           if [[ "$EVENT_NAME" == "issue_comment" ]]; then
-            MATCH=$(echo "$COMMENT_BODY" | grep -oE '/autoclose([[:space:]]+[0-9]+w)?' | head -n1 || true)
+            # Only allow maintainers/collaborators to trigger /autoclose
+            AUTHOR_ASSOC="${{ github.event.comment.author_association }}"
+            if [[ "$AUTHOR_ASSOC" != "OWNER" && "$AUTHOR_ASSOC" != "COLLABORATOR" && "$AUTHOR_ASSOC" != "MEMBER" ]]; then
+              echo "found=false" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            # Strip blockquoted lines to avoid triggering on quoted /autoclose
+            FILTERED_BODY=$(echo "$COMMENT_BODY" | grep -v '^[[:space:]]*>')
+            MATCH=$(echo "$FILTERED_BODY" | grep -oE '/autoclose([[:space:]]+[0-9]+w)?' | head -n1 || true)
             if [[ -n "$MATCH" ]]; then
               FOUND=true
               WEEKS=$(echo "$MATCH" | grep -oE '[0-9]+' || true)
