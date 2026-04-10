@@ -73,7 +73,11 @@ The plugin will handle installing Sunshine automatically.
    - Relevant log excerpts (attach or paste them)
 
 ### I manually installed Sunshine before. Can I still use Decky Sunshine?<a id="faq-installedBefore"></a>
-This depends on how you ran Sunshine before. If you started Sunshine as root user (e.g. using `sudo -i flatpak run`), you should be able to login using the credentials you used in your initial setup. If this does not work, you could uninstall Sunshine and delete its configuration (this includes all paired devices!) using the command `flatpak uninstall --delete-data dev.lizardbyte.app.Sunshine`, and then let Decky Sunshine install and setup Sunshine. You could also try setting a username and password for the root user (see the [Sunshine documentation about forgotten credentials](https://docs.lizardbyte.dev/projects/sunshine/master/md_docs_2troubleshooting.html#forgotten-credentials)).
+This depends on how you ran Sunshine before.
+
+**If you installed Sunshine as the `deck` user** (e.g. `flatpak install dev.lizardbyte.app.Sunshine` without `sudo`): The plugin will not detect this user-scoped installation and will install Sunshine system-wide instead, initializing it with a fresh set of credentials. Use the **"Show credentials"** button in the plugin UI to retrieve the generated credentials for the Web UI.
+
+**If you installed Sunshine system-wide or ran it as root** (e.g. using `sudo -i flatpak run`): The plugin will detect the existing installation and you should be able to log in using the credentials from your initial setup. If this does not work, you can reset the credentials for the root user by running `sudo -i flatpak run dev.lizardbyte.app.Sunshine --creds <username> <password>` (note the `sudo -i` — running without it would reset credentials for the `deck` user instead, which has no effect on the plugin's Sunshine instance). Alternatively, uninstall Sunshine and delete its configuration (this includes all paired devices!) using `sudo -i flatpak uninstall --delete-data dev.lizardbyte.app.Sunshine`, then let Decky Sunshine reinstall it.
 
 ### Will you add feature X?
 The goal of this plugin is to simplify setting up Sunshine in Game Mode and pairing Moonlight clients.
