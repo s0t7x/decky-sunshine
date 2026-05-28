@@ -126,7 +126,7 @@ class SunshineController:
             ["flatpak", "ps", "--columns=application"],
             context="checking whether Sunshine is running"
         )
-        return result and any(line.strip() == self.SunshineFlatpakAppId for line in result.splitlines())
+        return any(line.strip() == self.SunshineFlatpakAppId for line in (result or "").splitlines())
 
     async def areCredentialsValid_async(self) -> bool | None:
         """
@@ -222,7 +222,7 @@ class SunshineController:
 
         # Run Sunshine
         try:
-            subprocess.Popen(f"sh -c 'flatpak run --socket=wayland {self.SunshineFlatpakAppId}'",
+            subprocess.Popen(f"sh -c 'flatpak run --system --socket=wayland {self.SunshineFlatpakAppId}'",
                              env=self.environment_variables,
                              shell=True,
                              preexec_fn=os.setsid)
@@ -614,7 +614,7 @@ class SunshineController:
                 ["flatpak", "list", "--system", "--columns=application"],
                 context="checking whether Sunshine is installed"
             )
-        return result and any(line.strip() == self.SunshineFlatpakAppId for line in result.splitlines())
+        return any(line.strip() == self.SunshineFlatpakAppId for line in (result or "").splitlines())
 
     def _copyBwrap(self) -> bool:
         """
