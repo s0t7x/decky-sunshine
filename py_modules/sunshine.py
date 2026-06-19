@@ -462,20 +462,14 @@ class SunshineController:
             request.data = json.dumps(data).encode('utf-8')
         return request
 
-    def _findPulseAudioSocketPath(self) -> str:
+    def _getPulseAudioSocketPathCandidates(self) -> tuple[list[str], int | None]:
         """
-        Find the PulseAudio/PipeWire socket path.
-        Searches common locations and returns the first valid socket found.
-        :return: The socket path in the format "/path/to/socket", or a default path if not found
+        Get PulseAudio/PipeWire socket path candidates in preference order.
+        :return: A tuple with candidate paths and the deck user's UID if available
         """
-
-        # Try to get XDG_RUNTIME_DIR first, which is the standard location
         xdg_runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
-
-        # Build socket patterns to check (in order of preference)
         socket_patterns = []
 
-        # If XDG_RUNTIME_DIR is set and it's not root's directory, prioritize it
         if xdg_runtime_dir and '/run/user/0' not in xdg_runtime_dir:
             socket_patterns.extend([
                 f"{xdg_runtime_dir}/pulse/native",
@@ -506,14 +500,30 @@ class SunshineController:
             "/tmp/pulse-*/native",
         ])
 
+        socket_paths = []
+        seen_paths = set()
         for pattern in socket_patterns:
             matches = glob.glob(pattern) if '*' in pattern else [pattern]
             for socket_path in matches:
-                # Skip root user's socket (uid 0)
                 if '/run/user/0/' in socket_path:
                     continue
-                if os.path.exists(socket_path):
-                    return socket_path
+                if socket_path not in seen_paths:
+                    socket_paths.append(socket_path)
+                    seen_paths.add(socket_path)
+
+        return socket_paths, deck_uid
+
+    def _findPulseAudioSocketPath(self) -> str:
+        """
+        Find the PulseAudio/PipeWire socket path.
+        Searches common locations and returns the first existing socket found.
+        :return: The socket path in the format "/path/to/socket", or a default path if not found
+        """
+        socket_paths, deck_uid = self._getPulseAudioSocketPathCandidates()
+
+        for socket_path in socket_paths:
+            if os.path.exists(socket_path):
+                return socket_path
 
         # If no existing socket path was found, return a default path
         # Try to use deck user's UID if found, otherwise use 1000
@@ -521,6 +531,35 @@ class SunshineController:
         default_socket = f"/run/user/{default_uid}/pulse/native"
         self.logger.warning(f"No PulseAudio socket found, using default: {default_socket}")
         return default_socket
+
+    def _canConnectToAudioSocket(self, socket_path: str) -> bool:
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+                sock.settimeout(1)
+                sock.connect(socket_path)
+            return True
+        except (socket.error, OSError) as e:
+            self.logger.debug(f"Cannot connect to audio socket {socket_path}: {e}")
+            return False
+        except Exception as e:
+            self.logger.exception("Unexpected error checking audio availability", exc_info=e)
+            return False
+
+    def _findWorkingPulseAudioSocketPath(self) -> str | None:
+        """
+        Find the first existing audio socket that can actually be connected to.
+        """
+        socket_paths, _ = self._getPulseAudioSocketPathCandidates()
+
+        for socket_path in socket_paths:
+            if not os.path.exists(socket_path):
+                self.logger.debug(f"Audio socket does not exist: {socket_path}")
+                continue
+
+            if self._canConnectToAudioSocket(socket_path):
+                return socket_path
+
+        return None
 
     def _isDisplayAvailable(self) -> bool:
         """
@@ -558,25 +597,9 @@ class SunshineController:
         how Sunshine checks for audio availability.
         :return: True if audio is available, otherwise False.
         """
-        # Re-evaluate the best socket each time, as the correct socket may not have existed on startup (cold boot)
-        pulse_socket_path = self._findPulseAudioSocketPath()
-
-        # Checking whether the socket path exists should only fail in case we had to use a default path
-        if not os.path.exists(pulse_socket_path):
-            self.logger.debug(f"Audio socket does not exist: {pulse_socket_path}")
-            return False
-
-        # Try to connect to the socket to verify it's actually working
-        try:
-            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            sock.settimeout(1)
-            sock.connect(pulse_socket_path)
-            sock.close()
-        except (socket.error, OSError) as e:
-            self.logger.debug(f"Cannot connect to audio socket {pulse_socket_path}: {e}")
-            return False
-        except Exception as e:
-            self.logger.exception(f"Unexpected error checking audio availability", exc_info=e)
+        # Re-evaluate the best socket each time, as the correct socket may not have existed on startup.
+        pulse_socket_path = self._findWorkingPulseAudioSocketPath()
+        if not pulse_socket_path:
             return False
 
         # Update the environment variable if a different working socket was found so Sunshine will use it
