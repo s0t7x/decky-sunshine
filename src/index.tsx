@@ -329,7 +329,7 @@ const Content: VFC = () => {
       <PanelSectionRow>
         <DropdownItem
           label="Video encoder"
-          description="Which path Sunshine uses to encode the stream. VAAPI is the stable AMD hardware path on the Deck; Vulkan can be faster but is buggy on this GPU; Software is CPU-only (highest latency). Auto lets Sunshine choose. Changing this restarts Sunshine, so an active stream will briefly drop."
+          description="Which path Sunshine uses to encode the stream. VAAPI is the stable AMD hardware path on the Deck; Vulkan can be faster but tends to hit more bugs across different resolution / docking combinations on Steam Deck hardware and software; Software is CPU-only (highest latency). Auto lets Sunshine choose. Changing this restarts Sunshine, so an active stream will briefly drop."
           rgOptions={[
             { data: "", label: "Auto" },
             { data: "vaapi", label: "VAAPI (recommended)" },
