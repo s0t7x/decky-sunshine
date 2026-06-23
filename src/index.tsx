@@ -13,6 +13,7 @@ import backend from "./util/backend";
 
 import { PairingModal } from "./components/PairingModal";
 import { CredentialsModal } from "./components/CredentialsModal";
+import { LabelWithInfo } from "./components/LabelWithInfo";
 import { LOG_TAG } from "./util/constants";
 
 const Content: VFC = () => {
@@ -240,51 +241,6 @@ const Content: VFC = () => {
           </ButtonItem>
       </PanelSectionRow>
 
-      {/* Update Section */}
-      <PanelSectionRow>
-        <div style={{ display: "contents" }}>
-          <span>Installed Sunshine version: {isRefreshingVersionInfo ? "Checking..." : sunshineCurrentVersion || "Unknown"}</span>
-          {isRefreshingVersionInfo && <Spinner style={{ width: 14, height: 14, marginLeft: 8 }} />}
-          <br />
-          {sunshineUpdateVersion
-            ? <div style={{ display: "contents" }}>
-                <span style={{ color: "orange" }}>
-                  Available Sunshine version: {sunshineUpdateVersion} {(sunshineCurrentVersion === sunshineUpdateVersion && "(Rebuild)")}
-                </span>
-                <ButtonItem
-                  disabled={isStartingOrStopping || isUpdating}
-                  onClick={async () => {
-                    setIsUpdating(true);
-                    const success = await backend.updateSunshine();
-                    setIsUpdating(false);
-                    if (success) {
-                      setSunshineUpdateVersion(null);
-                      setUpdateCheckTriggeredManually(false);
-                    }
-                    updateSunshineState();
-                  }}
-                >
-                  Update
-                </ButtonItem>
-              </div>
-           : <div style={{ display: "contents" }}>
-                {updateCheckTriggeredManually && sunshineUpdateVersion == null && (
-                  <span>No update available</span>
-                )}
-                <ButtonItem
-                  disabled={isRefreshingVersionInfo}
-                  onClick={async () => {
-                    setUpdateCheckTriggeredManually(true);
-                    await refreshVersionInfo();
-                  }}
-                >
-                  Check for Sunshine update
-                </ButtonItem>
-              </div>
-          }
-        </div>
-      </PanelSectionRow>
-
       {/* Credentials Section */}
       <PanelSectionRow>
         <div style={{ display: "contents" }}>
@@ -328,8 +284,10 @@ const Content: VFC = () => {
       {/* Encoder selection */}
       <PanelSectionRow>
         <DropdownItem
-          label="Video encoder"
-          description="Which path Sunshine uses to encode the stream. VAAPI is the stable AMD hardware path on the Deck; Vulkan can be faster but tends to hit more bugs across different resolution / docking combinations on Steam Deck hardware and software; Software is CPU-only (highest latency). Auto lets Sunshine choose. Changing this restarts Sunshine, so an active stream will briefly drop."
+          label={<LabelWithInfo
+            title="Video encoder"
+            help={"Which path Sunshine uses to encode the stream.\n\nVAAPI: the stable AMD hardware path on the Deck (recommended).\n\nVulkan: can be faster, but tends to hit more bugs across different resolution / docking combinations on Steam Deck hardware and software.\n\nSoftware: CPU-only (highest latency).\n\nAuto: let Sunshine choose.\n\nChanging this restarts Sunshine, so an active stream will briefly drop."}
+          />}
           rgOptions={[
             { data: "", label: "Auto" },
             { data: "vaapi", label: "VAAPI (recommended)" },
@@ -343,6 +301,51 @@ const Content: VFC = () => {
             backend.setEncoder(option.data).then(setEncoder);
           }}
         />
+      </PanelSectionRow>
+
+      {/* Update Section */}
+      <PanelSectionRow>
+        <div style={{ display: "contents" }}>
+          <span>Installed Sunshine version: {isRefreshingVersionInfo ? "Checking..." : sunshineCurrentVersion || "Unknown"}</span>
+          {isRefreshingVersionInfo && <Spinner style={{ width: 14, height: 14, marginLeft: 8 }} />}
+          <br />
+          {sunshineUpdateVersion
+            ? <div style={{ display: "contents" }}>
+                <span style={{ color: "orange" }}>
+                  Available Sunshine version: {sunshineUpdateVersion} {(sunshineCurrentVersion === sunshineUpdateVersion && "(Rebuild)")}
+                </span>
+                <ButtonItem
+                  disabled={isStartingOrStopping || isUpdating}
+                  onClick={async () => {
+                    setIsUpdating(true);
+                    const success = await backend.updateSunshine();
+                    setIsUpdating(false);
+                    if (success) {
+                      setSunshineUpdateVersion(null);
+                      setUpdateCheckTriggeredManually(false);
+                    }
+                    updateSunshineState();
+                  }}
+                >
+                  Update
+                </ButtonItem>
+              </div>
+           : <div style={{ display: "contents" }}>
+                {updateCheckTriggeredManually && sunshineUpdateVersion == null && (
+                  <span>No update available</span>
+                )}
+                <ButtonItem
+                  disabled={isRefreshingVersionInfo}
+                  onClick={async () => {
+                    setUpdateCheckTriggeredManually(true);
+                    await refreshVersionInfo();
+                  }}
+                >
+                  Check for Sunshine update
+                </ButtonItem>
+              </div>
+          }
+        </div>
       </PanelSectionRow>
     </PanelSection>
   );
