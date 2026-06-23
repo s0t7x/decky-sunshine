@@ -1,4 +1,4 @@
-import { VFC, useState } from 'react'
+import { VFC, useState, useRef } from 'react'
 import { Focusable, showModal } from "decky-frontend-lib";
 import { FaInfoCircle } from "react-icons/fa";
 import { InfoModal } from "./InfoModal";
@@ -16,7 +16,18 @@ export const LabelWithInfo: VFC<{
     help: string;
 }> = ({ title, help }) => {
     const [focused, setFocused] = useState(false);
-    const open = () => showModal(<InfoModal title={title} body={help} />);
+    const lastOpenRef = useRef(0);
+
+    // A Focusable can deliver both onActivate and onClick for a single press, which
+    // would stack two identical modals. Stop propagation (so we never toggle the
+    // parent field) and de-dupe opens that land within the same interaction.
+    const open = (e?: any) => {
+        e?.stopPropagation?.();
+        const now = performance.now();
+        if (now - lastOpenRef.current < 300) return;
+        lastOpenRef.current = now;
+        showModal(<InfoModal title={title} body={help} />);
+    };
 
     return (
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -36,7 +47,7 @@ export const LabelWithInfo: VFC<{
                     transform: focused ? "scale(1.1)" : "scale(1)",
                 }}
                 onActivate={open}
-                onClick={(e: any) => { e?.stopPropagation?.(); open(); }}
+                onClick={open}
                 onFocus={() => setFocused(true)}
                 onBlur={() => setFocused(false)}
                 onGamepadFocus={() => setFocused(true)}
