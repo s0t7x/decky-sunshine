@@ -58,6 +58,16 @@ class Backend {
         return result === true;
     }
 
+    public getEncoder = async (): Promise<string> => {
+        const result = await this.call<string>("getEncoder");
+        return result ?? "";
+    }
+
+    public setEncoder = async (encoder: string): Promise<string> => {
+        const result = await this.call<{ encoder: string }, string>("setEncoder", { encoder });
+        return result ?? "";
+    }
+
     private call<TRes>(method: string): Promise<TRes | null>;
     private call<TArgs, TRes>(method: string, args: TArgs): Promise<TRes | null>;
     private async call(method: string, args?: unknown): Promise<unknown | null>{

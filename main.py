@@ -46,6 +46,23 @@ class Plugin:
             self.settingManager.setSetting("lastRunState", "stop")
         return res
 
+    async def getEncoder(self):
+        return self.sunshineController.getEncoder()
+
+    async def setEncoder(self, encoder):
+        """
+        Persist the Sunshine video encoder selection. Sunshine only reads its config
+        at launch, so if it's currently running we restart it to apply the change.
+        Returns the encoder that is now in effect (so the UI can confirm / revert).
+        """
+        if not self.sunshineController.setEncoder(encoder):
+            return self.sunshineController.getEncoder()
+        if self.sunshineController.isSunshineRunning():
+            decky.logger.info("Restarting Sunshine to apply encoder change")
+            await self.sunshineController.stop_async()
+            await self.sunshineController.start_async()
+        return self.sunshineController.getEncoder()
+
     async def stopSunshine(self):
         decky.logger.info("Stopping sunshine...")
         res = await self.sunshineController.stop_async()

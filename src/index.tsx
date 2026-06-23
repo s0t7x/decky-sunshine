@@ -4,6 +4,7 @@ import {
   PanelSection,
   PanelSectionRow,
   ButtonItem,
+  DropdownItem,
   Spinner,
   showModal,
 } from "decky-frontend-lib";
@@ -31,6 +32,7 @@ const Content: VFC = () => {
   const [credentials, setCredentials] = useState<{username: string, password: string} | null>(null);
   const [isGettingCredentials, setIsGettingCredentials] = useState<boolean>(false);
   const [getCredentialsReturnedValue, setGetCredentialsReturnedValue] = useState<boolean | null>(null);
+  const [encoder, setEncoder] = useState<string>("");
 
   const updateSunshineState = async () => {
     const isSunshineRunning = await backend.isSunshineRunning();
@@ -65,6 +67,10 @@ const Content: VFC = () => {
 
   useEffect(() => {
     refreshVersionInfo();
+  }, []);
+
+  useEffect(() => {
+    backend.getEncoder().then(setEncoder);
   }, []);
 
   useEffect(() => {
@@ -317,6 +323,26 @@ const Content: VFC = () => {
                 </ButtonItem>
             }
           </div>
+      </PanelSectionRow>
+
+      {/* Encoder selection */}
+      <PanelSectionRow>
+        <DropdownItem
+          label="Video encoder"
+          description="Which path Sunshine uses to encode the stream. VAAPI is the stable AMD hardware path on the Deck; Vulkan can be faster but is buggy on this GPU; Software is CPU-only (highest latency). Auto lets Sunshine choose. Changing this restarts Sunshine, so an active stream will briefly drop."
+          rgOptions={[
+            { data: "", label: "Auto" },
+            { data: "vaapi", label: "VAAPI (recommended)" },
+            { data: "vulkan", label: "Vulkan" },
+            { data: "software", label: "Software (CPU)" },
+          ]}
+          selectedOption={encoder}
+          disabled={isBusy}
+          onChange={(option: { data: string }) => {
+            setEncoder(option.data);
+            backend.setEncoder(option.data).then(setEncoder);
+          }}
+        />
       </PanelSectionRow>
     </PanelSection>
   );

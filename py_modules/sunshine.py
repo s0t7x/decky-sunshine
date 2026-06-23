@@ -266,6 +266,90 @@ class SunshineController:
 
         return True
 
+    # Encoders selectable from the UI. "" means "let Sunshine auto-detect".
+    VALID_ENCODERS = ("", "vaapi", "vulkan", "software")
+
+    @property
+    def configPath(self) -> str:
+        """
+        Path to the sunshine.conf the *streaming* Sunshine actually reads. Sunshine
+        is launched as a flatpak with this controller's environment, so it resolves
+        its config under that env's HOME (root, in practice) — deriving the path the
+        same way guarantees we edit the file the running process loads, not the
+        deck-user copy.
+        """
+        home = self.environment_variables.get("HOME") or "/root"
+        return os.path.join(home, ".var", "app", self.SunshineFlatpakAppId,
+                            "config", "sunshine", "sunshine.conf")
+
+    def _set_config_value(self, key: str, value: str | None) -> bool:
+        """
+        Update a single 'key = value' line in sunshine.conf, preserving every other
+        line (comments, hevc_mode, etc.). value=None removes the key entirely.
+        """
+        try:
+            try:
+                with open(self.configPath, "r") as f:
+                    lines = f.readlines()
+            except FileNotFoundError:
+                os.makedirs(os.path.dirname(self.configPath), exist_ok=True)
+                lines = []
+
+            new_lines = []
+            replaced = False
+            for line in lines:
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#") and "=" in stripped \
+                        and stripped.split("=", 1)[0].strip() == key:
+                    if value is not None and not replaced:
+                        new_lines.append(f"{key} = {value}\n")
+                    replaced = True
+                    continue
+                new_lines.append(line)
+
+            if value is not None and not replaced:
+                if new_lines and not new_lines[-1].endswith("\n"):
+                    new_lines[-1] += "\n"
+                new_lines.append(f"{key} = {value}\n")
+
+            with open(self.configPath, "w") as f:
+                f.writelines(new_lines)
+            return True
+        except Exception as e:
+            self.logger.exception(f"Could not set Sunshine config '{key}'", exc_info=e)
+            return False
+
+    def getEncoder(self) -> str:
+        """Return the configured encoder, or "" if unset (auto-detect)."""
+        try:
+            with open(self.configPath, "r") as f:
+                for line in f:
+                    stripped = line.strip()
+                    if stripped.startswith("#") or "=" not in stripped:
+                        continue
+                    key, _, value = stripped.partition("=")
+                    if key.strip() == "encoder":
+                        return value.strip()
+        except FileNotFoundError:
+            pass
+        except Exception as e:
+            self.logger.exception("Could not read Sunshine encoder", exc_info=e)
+        return ""
+
+    def setEncoder(self, encoder: str) -> bool:
+        """
+        Write the encoder selection to sunshine.conf. "" / "auto" removes the key so
+        Sunshine auto-detects. Takes effect on Sunshine's next start.
+        """
+        encoder = (encoder or "").strip().lower()
+        if encoder == "auto":
+            encoder = ""
+        if encoder not in self.VALID_ENCODERS:
+            self.logger.error(f"Refusing to set unknown encoder '{encoder}'")
+            return False
+        self.logger.info(f"Setting Sunshine encoder to '{encoder or 'auto'}'")
+        return self._set_config_value("encoder", encoder or None)
+
     async def pair_async(self, pin, client_name) -> bool:
         """
         Send a PIN and client name to the Sunshine server.
