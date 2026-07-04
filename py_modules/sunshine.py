@@ -464,8 +464,13 @@ class SunshineController:
 
     def _findPulseAudioSocketPath(self) -> str:
         """
-        Find the PulseAudio/PipeWire socket path.
-        Searches common locations and returns the first connectable socket found.
+        Find the PulseAudio protocol socket path (on PipeWire systems provided
+        by pipewire-pulse). Searches common locations and returns the first
+        connectable socket found.
+        Note that pipewire-0 sockets are deliberately not considered: PULSE_SERVER
+        must point to a socket speaking the PulseAudio protocol, while pipewire-0
+        speaks the PipeWire native protocol -- it would accept a connection but be
+        unusable for Sunshine's libpulse client.
         :return: The socket path in the format "/path/to/socket", or a default path if not found
         """
         # Try to get XDG_RUNTIME_DIR first, which is the standard location
@@ -476,10 +481,7 @@ class SunshineController:
 
         # If XDG_RUNTIME_DIR is set and it's not root's directory, prioritize it
         if xdg_runtime_dir and '/run/user/0' not in xdg_runtime_dir:
-            socket_patterns.extend([
-                f"{xdg_runtime_dir}/pulse/native",
-                f"{xdg_runtime_dir}/pipewire-0",
-            ])
+            socket_patterns.append(f"{xdg_runtime_dir}/pulse/native")
 
         # Next, add the socket directories for the user 'deck'.
         # Note that we determine the UID of the specific user 'deck' here to prioritize it,
@@ -489,19 +491,15 @@ class SunshineController:
         try:
             deck_user = pwd.getpwnam('deck')
             deck_uid = deck_user.pw_uid
-            socket_patterns.extend([
-                f"/run/user/{deck_uid}/pulse/native",
-                f"/run/user/{deck_uid}/pipewire-0",
-            ])
+            socket_patterns.append(f"/run/user/{deck_uid}/pulse/native")
         except KeyError:
             # User 'deck' does not exist, which is expected on non-Steam Deck systems
             pass
 
-        # Finally, add all /run/user/*/pulse/native and /run/user/*/pipewire-0 socket directories.
+        # Finally, add all /run/user/*/pulse/native socket directories.
         # This will find sockets for any user (1000, 1001, etc.)
         socket_patterns.extend([
             "/run/user/*/pulse/native",
-            "/run/user/*/pipewire-0",
             "/tmp/pulse-*/native",
         ])
 
