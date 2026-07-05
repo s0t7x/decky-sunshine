@@ -64,6 +64,10 @@ class SunshineController:
 
     authHeader = ""
 
+    # Whether the socket-discovery fallback warning has already been logged;
+    # kept as state so the retry loop in start_async does not repeat it every second
+    _socket_fallback_warned = False
+
     def __init__(self, logger) -> None:
         """
         Initialize the SunshineController instance.
@@ -506,6 +510,7 @@ class SunshineController:
 
         seen_socket_patterns = set()
         seen_socket_paths = set()
+        existing_not_connectable = []
         for pattern in socket_patterns:
             if pattern in seen_socket_patterns:
                 continue
@@ -519,14 +524,28 @@ class SunshineController:
                 if socket_path in seen_socket_paths:
                     continue
                 seen_socket_paths.add(socket_path)
-                if os.path.exists(socket_path) and self._canConnectToAudioSocket(socket_path):
+                if not os.path.exists(socket_path):
+                    continue
+                if self._canConnectToAudioSocket(socket_path):
+                    # Re-arm the fallback warning so a later regression is reported again
+                    self._socket_fallback_warned = False
                     return socket_path
+                existing_not_connectable.append(socket_path)
 
-        # If no existing socket path was found, return a default path
+        # If no usable socket was found, return a default path
         # Try to use deck user's UID if found, otherwise use 1000
         default_uid = deck_uid if deck_uid else 1000
         default_socket = f"/run/user/{default_uid}/pulse/native"
-        self.logger.warning(f"No PulseAudio socket found, using default: {default_socket}")
+        if existing_not_connectable:
+            message = (f"PulseAudio socket(s) found but not accepting connections (yet): "
+                       f"{', '.join(existing_not_connectable)} - using default: {default_socket}")
+        else:
+            message = f"No PulseAudio socket found, using default: {default_socket}"
+        if self._socket_fallback_warned:
+            self.logger.debug(message)
+        else:
+            self.logger.warning(message)
+            self._socket_fallback_warned = True
         return default_socket
 
     @staticmethod
