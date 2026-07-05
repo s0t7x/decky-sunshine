@@ -515,29 +515,29 @@ class SunshineController:
             "/tmp/pulse-*/native",
         ])
 
-        seen_socket_patterns = set()
-        seen_socket_paths = set()
-        existing_not_connectable = []
+        # Build a duplicate-free candidate list before probing: the same path can
+        # arrive via several patterns (e.g. XDG_RUNTIME_DIR, the deck user entry
+        # and the /run/user/* glob), and each socket should only get one connect
+        # attempt and appear only once in the fallback log below.
+        candidate_paths = []
         for pattern in socket_patterns:
-            if pattern in seen_socket_patterns:
-                continue
-            seen_socket_patterns.add(pattern)
-
             matches = self._expandSocketPattern(pattern) if '*' in pattern else [pattern]
             for socket_path in matches:
-                # Skip root user's socket (uid 0)
-                if '/run/user/0/' in socket_path:
-                    continue
-                if socket_path in seen_socket_paths:
-                    continue
-                seen_socket_paths.add(socket_path)
-                if not os.path.exists(socket_path):
-                    continue
-                if self._canConnectToAudioSocket(socket_path):
-                    # Re-arm the fallback warning so a later regression is reported again
-                    self._socket_fallback_warned = False
-                    return socket_path
-                existing_not_connectable.append(socket_path)
+                if socket_path not in candidate_paths:
+                    candidate_paths.append(socket_path)
+
+        existing_not_connectable = []
+        for socket_path in candidate_paths:
+            # Skip root user's socket (uid 0)
+            if '/run/user/0/' in socket_path:
+                continue
+            if not os.path.exists(socket_path):
+                continue
+            if self._canConnectToAudioSocket(socket_path):
+                # Re-arm the fallback warning so a later regression is reported again
+                self._socket_fallback_warned = False
+                return socket_path
+            existing_not_connectable.append(socket_path)
 
         # If no usable socket was found, return a default path
         # Try to use deck user's UID if found, otherwise use 1000
