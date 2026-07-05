@@ -9,6 +9,7 @@ import secrets
 import glob
 import socket
 import pwd
+import re
 
 from typing import Sequence
 from urllib.error import URLError
@@ -510,7 +511,7 @@ class SunshineController:
                 continue
             seen_socket_patterns.add(pattern)
 
-            matches = glob.glob(pattern) if '*' in pattern else [pattern]
+            matches = self._expandSocketPattern(pattern) if '*' in pattern else [pattern]
             for socket_path in matches:
                 # Skip root user's socket (uid 0)
                 if '/run/user/0/' in socket_path:
@@ -527,6 +528,29 @@ class SunshineController:
         default_socket = f"/run/user/{default_uid}/pulse/native"
         self.logger.warning(f"No PulseAudio socket found, using default: {default_socket}")
         return default_socket
+
+    @staticmethod
+    def _expandSocketPattern(pattern: str) -> list:
+        """
+        Expand a glob pattern into a deterministic list of candidate socket paths.
+        glob returns matches in filesystem readdir order, which is effectively
+        random; sorting numerically by UID makes the search order reproducible
+        across boots and systems.
+        Sockets of system users (uid < 1000) are skipped: display-manager
+        greeters like gdm/sddm run their own PipeWire/PulseAudio instance whose
+        socket must not win over the session user's one.
+        :param pattern: The glob pattern to expand
+        :return: Matching paths, sorted numerically by UID (non-/run/user
+                 matches such as /tmp/pulse-* sort last, lexically)
+        """
+        matches = []
+        for socket_path in glob.glob(pattern):
+            uid_match = re.match(r"^/run/user/(\d+)/", socket_path)
+            uid = int(uid_match.group(1)) if uid_match else None
+            if uid is not None and uid < 1000:
+                continue
+            matches.append((uid is None, uid or 0, socket_path))
+        return [socket_path for _, _, socket_path in sorted(matches)]
 
     def _canConnectToAudioSocket(self, socket_path: str) -> bool:
         try:
