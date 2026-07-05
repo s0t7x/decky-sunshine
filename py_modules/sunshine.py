@@ -82,7 +82,14 @@ class SunshineController:
         self.opener = build_opener(NoRedirect(), HTTPSHandler(context=sslContext))
 
         self.environment_variables = os.environ.copy()
-        self.environment_variables["PULSE_SERVER"] = f"unix:{self._findPulseAudioSocketPath()}"
+        # A PULSE_SERVER present in the inherited environment can only have been
+        # configured deliberately (e.g. via a systemd drop-in for the Decky
+        # loader service), so respect it and skip socket discovery entirely.
+        external_pulse_server = os.environ.get("PULSE_SERVER")
+        if external_pulse_server:
+            self.logger.info(f"Using externally configured PULSE_SERVER: {external_pulse_server}")
+        else:
+            self.environment_variables["PULSE_SERVER"] = f"unix:{self._findPulseAudioSocketPath()}"
         self.environment_variables["DISPLAY"] = ":0"
         self.environment_variables["FLATPAK_BWRAP"] = self.environment_variables.get("DECKY_PLUGIN_RUNTIME_DIR", "") + "/bwrap"
         self.environment_variables["LD_LIBRARY_PATH"] = "/usr/lib/:" + self.environment_variables.get("LD_LIBRARY_PATH", "")
@@ -620,6 +627,17 @@ class SunshineController:
         how Sunshine checks for audio availability.
         :return: True if audio is available, otherwise False.
         """
+        # An externally configured PULSE_SERVER overrides socket discovery entirely
+        external_pulse_server = os.environ.get("PULSE_SERVER")
+        if external_pulse_server:
+            if external_pulse_server.startswith("unix:"):
+                socket_path = external_pulse_server[len("unix:"):]
+                if not (os.path.exists(socket_path) and self._canConnectToAudioSocket(socket_path)):
+                    self.logger.debug(f"Externally configured PULSE_SERVER is not connectable (yet): {external_pulse_server}")
+                    return False
+            # Non-unix values (e.g. tcp:host:port) are trusted without a check
+            return True
+
         # Re-evaluate the best socket each time, as the correct socket may not have existed on startup (cold boot)
         pulse_socket_path = self._findPulseAudioSocketPath()
 
