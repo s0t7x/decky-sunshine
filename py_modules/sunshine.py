@@ -9,6 +9,7 @@ import secrets
 import glob
 import socket
 import pwd
+import re
 
 from typing import Sequence
 from urllib.error import URLError
@@ -63,6 +64,10 @@ class SunshineController:
 
     authHeader = ""
 
+    # Whether the socket-discovery fallback warning has already been logged;
+    # kept as state so the retry loop in start_async does not repeat it every second
+    _socket_fallback_warned = False
+
     def __init__(self, logger) -> None:
         """
         Initialize the SunshineController instance.
@@ -77,7 +82,14 @@ class SunshineController:
         self.opener = build_opener(NoRedirect(), HTTPSHandler(context=sslContext))
 
         self.environment_variables = os.environ.copy()
-        self.environment_variables["PULSE_SERVER"] = f"unix:{self._findPulseAudioSocketPath()}"
+        # A PULSE_SERVER present in the inherited environment can only have been
+        # configured deliberately (e.g. via a systemd drop-in for the Decky
+        # loader service), so respect it and skip socket discovery entirely.
+        external_pulse_server = os.environ.get("PULSE_SERVER")
+        if external_pulse_server:
+            self.logger.info(f"Using externally configured PULSE_SERVER: {external_pulse_server}")
+        else:
+            self.environment_variables["PULSE_SERVER"] = f"unix:{self._findPulseAudioSocketPath()}"
         self.environment_variables["DISPLAY"] = ":0"
         self.environment_variables["FLATPAK_BWRAP"] = self.environment_variables.get("DECKY_PLUGIN_RUNTIME_DIR", "") + "/bwrap"
         self.environment_variables["LD_LIBRARY_PATH"] = "/usr/lib/:" + self.environment_variables.get("LD_LIBRARY_PATH", "")
@@ -464,11 +476,15 @@ class SunshineController:
 
     def _findPulseAudioSocketPath(self) -> str:
         """
-        Find the PulseAudio/PipeWire socket path.
-        Searches common locations and returns the first valid socket found.
+        Find the PulseAudio protocol socket path (on PipeWire systems provided
+        by pipewire-pulse). Searches common locations and returns the first
+        connectable socket found.
+        Note that pipewire-0 sockets are deliberately not considered: PULSE_SERVER
+        must point to a socket speaking the PulseAudio protocol, while pipewire-0
+        speaks the PipeWire native protocol -- it would accept a connection but be
+        unusable for Sunshine's libpulse client.
         :return: The socket path in the format "/path/to/socket", or a default path if not found
         """
-
         # Try to get XDG_RUNTIME_DIR first, which is the standard location
         xdg_runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
 
@@ -477,10 +493,7 @@ class SunshineController:
 
         # If XDG_RUNTIME_DIR is set and it's not root's directory, prioritize it
         if xdg_runtime_dir and '/run/user/0' not in xdg_runtime_dir:
-            socket_patterns.extend([
-                f"{xdg_runtime_dir}/pulse/native",
-                f"{xdg_runtime_dir}/pipewire-0",
-            ])
+            socket_patterns.append(f"{xdg_runtime_dir}/pulse/native")
 
         # Next, add the socket directories for the user 'deck'.
         # Note that we determine the UID of the specific user 'deck' here to prioritize it,
@@ -490,37 +503,93 @@ class SunshineController:
         try:
             deck_user = pwd.getpwnam('deck')
             deck_uid = deck_user.pw_uid
-            socket_patterns.extend([
-                f"/run/user/{deck_uid}/pulse/native",
-                f"/run/user/{deck_uid}/pipewire-0",
-            ])
+            socket_patterns.append(f"/run/user/{deck_uid}/pulse/native")
         except KeyError:
             # User 'deck' does not exist, which is expected on non-Steam Deck systems
             pass
 
-        # Finally, add all /run/user/*/pulse/native and /run/user/*/pipewire-0 socket directories.
+        # Finally, add all /run/user/*/pulse/native socket directories.
         # This will find sockets for any user (1000, 1001, etc.)
         socket_patterns.extend([
             "/run/user/*/pulse/native",
-            "/run/user/*/pipewire-0",
             "/tmp/pulse-*/native",
         ])
 
+        # Build a duplicate-free candidate list before probing: the same path can
+        # arrive via several patterns (e.g. XDG_RUNTIME_DIR, the deck user entry
+        # and the /run/user/* glob), and each socket should only get one connect
+        # attempt and appear only once in the fallback log below.
+        candidate_paths = []
         for pattern in socket_patterns:
-            matches = glob.glob(pattern) if '*' in pattern else [pattern]
+            matches = self._expandSocketPattern(pattern) if '*' in pattern else [pattern]
             for socket_path in matches:
-                # Skip root user's socket (uid 0)
-                if '/run/user/0/' in socket_path:
-                    continue
-                if os.path.exists(socket_path):
-                    return socket_path
+                if socket_path not in candidate_paths:
+                    candidate_paths.append(socket_path)
 
-        # If no existing socket path was found, return a default path
+        existing_not_connectable = []
+        for socket_path in candidate_paths:
+            # Skip root user's socket (uid 0)
+            if '/run/user/0/' in socket_path:
+                continue
+            if not os.path.exists(socket_path):
+                continue
+            if self._canConnectToAudioSocket(socket_path):
+                # Re-arm the fallback warning so a later regression is reported again
+                self._socket_fallback_warned = False
+                return socket_path
+            existing_not_connectable.append(socket_path)
+
+        # If no usable socket was found, return a default path
         # Try to use deck user's UID if found, otherwise use 1000
         default_uid = deck_uid if deck_uid else 1000
         default_socket = f"/run/user/{default_uid}/pulse/native"
-        self.logger.warning(f"No PulseAudio socket found, using default: {default_socket}")
+        if existing_not_connectable:
+            message = (f"PulseAudio socket(s) found but not accepting connections (yet): "
+                       f"{', '.join(existing_not_connectable)} - using default: {default_socket}")
+        else:
+            message = f"No PulseAudio socket found, using default: {default_socket}"
+        if self._socket_fallback_warned:
+            self.logger.debug(message)
+        else:
+            self.logger.warning(message)
+            self._socket_fallback_warned = True
         return default_socket
+
+    @staticmethod
+    def _expandSocketPattern(pattern: str) -> list:
+        """
+        Expand a glob pattern into a deterministic list of candidate socket paths.
+        glob returns matches in filesystem readdir order, which is effectively
+        random; sorting numerically by UID makes the search order reproducible
+        across boots and systems.
+        Sockets of system users (uid < 1000) are skipped: display-manager
+        greeters like gdm/sddm run their own PipeWire/PulseAudio instance whose
+        socket must not win over the session user's one.
+        :param pattern: The glob pattern to expand
+        :return: Matching paths, sorted numerically by UID (non-/run/user
+                 matches such as /tmp/pulse-* sort last, lexically)
+        """
+        matches = []
+        for socket_path in glob.glob(pattern):
+            uid_match = re.match(r"^/run/user/(\d+)/", socket_path)
+            uid = int(uid_match.group(1)) if uid_match else None
+            if uid is not None and uid < 1000:
+                continue
+            matches.append((uid is None, uid or 0, socket_path))
+        return [socket_path for _, _, socket_path in sorted(matches)]
+
+    def _canConnectToAudioSocket(self, socket_path: str) -> bool:
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+                sock.settimeout(1)
+                sock.connect(socket_path)
+            return True
+        except (socket.error, OSError) as e:
+            self.logger.debug(f"Cannot connect to audio socket {socket_path}: {e}")
+            return False
+        except Exception as e:
+            self.logger.exception("Unexpected error checking audio availability", exc_info=e)
+            return False
 
     def _isDisplayAvailable(self) -> bool:
         """
@@ -558,6 +627,17 @@ class SunshineController:
         how Sunshine checks for audio availability.
         :return: True if audio is available, otherwise False.
         """
+        # An externally configured PULSE_SERVER overrides socket discovery entirely
+        external_pulse_server = os.environ.get("PULSE_SERVER")
+        if external_pulse_server:
+            if external_pulse_server.startswith("unix:"):
+                socket_path = external_pulse_server[len("unix:"):]
+                if not (os.path.exists(socket_path) and self._canConnectToAudioSocket(socket_path)):
+                    self.logger.debug(f"Externally configured PULSE_SERVER is not connectable (yet): {external_pulse_server}")
+                    return False
+            # Non-unix values (e.g. tcp:host:port) are trusted without a check
+            return True
+
         # Re-evaluate the best socket each time, as the correct socket may not have existed on startup (cold boot)
         pulse_socket_path = self._findPulseAudioSocketPath()
 
@@ -567,16 +647,7 @@ class SunshineController:
             return False
 
         # Try to connect to the socket to verify it's actually working
-        try:
-            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            sock.settimeout(1)
-            sock.connect(pulse_socket_path)
-            sock.close()
-        except (socket.error, OSError) as e:
-            self.logger.debug(f"Cannot connect to audio socket {pulse_socket_path}: {e}")
-            return False
-        except Exception as e:
-            self.logger.exception(f"Unexpected error checking audio availability", exc_info=e)
+        if not self._canConnectToAudioSocket(pulse_socket_path):
             return False
 
         # Update the environment variable if a different working socket was found so Sunshine will use it
