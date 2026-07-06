@@ -48,8 +48,11 @@ class Backend {
         return result === true;
     }
 
-    public getSunshineVersionInfo = async (): Promise<SunshineVersionInfo | null> => {
-        const result = await this.call<SunshineVersionInfo | null>("getSunshineVersionInfo");
+    public getSunshineVersionInfo = async (refreshAppstream: boolean): Promise<SunshineVersionInfo | null> => {
+        const result = await this.call<{ refresh_appstream: boolean }, SunshineVersionInfo | null>(
+            "getSunshineVersionInfo",
+            { refresh_appstream: refreshAppstream }
+        );
         return result;
     }
 
@@ -66,7 +69,6 @@ class Backend {
             return null;
         }
         const res = await this.serverAPI.callPluginMethod(method, args as unknown);
-        console.log(LOG_TAG, `Backend call ${method} result`, res);
         if (!res?.success) {
             console.error(LOG_TAG, `Backend method ${method} failed`, res?.result);
             return null;

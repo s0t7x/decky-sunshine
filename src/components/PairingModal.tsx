@@ -12,7 +12,7 @@ export const PairingModal: VFC<{
       }) => {
     const [pin, setPin] = useState("");
     const [clientName, setClientName] = useState("");
-    const [wasPairingSuccessfull, setWasPairingSucessfull ] = useState<boolean | null>(null);
+    const [wasPairingSuccessful, setWasPairingSuccessful ] = useState<boolean | null>(null);
     const [isWaitingForResponse, setIsWaitingForResponse ] = useState(false);
 
     const tryPair = async () => {
@@ -23,12 +23,12 @@ export const PairingModal: VFC<{
         closeModal?.()
       }
       setIsWaitingForResponse(false);
-      setWasPairingSucessfull(success);
+      setWasPairingSuccessful(success);
     }
 
     const handlePINChange = (e: ChangeEvent<HTMLInputElement>) => {
       if (/^\d{0,4}$/.test(e.currentTarget.value)) {
-        setWasPairingSucessfull(null);
+        setWasPairingSuccessful(null);
         setPin(e.currentTarget.value);
       }
     }
@@ -54,7 +54,7 @@ export const PairingModal: VFC<{
             onChange={handlePINChange} />
         </Field>
         {isWaitingForResponse && <span>Waiting for response...</span>}
-        {wasPairingSuccessfull === false && <span style={{ color: 'red' }}>Pairing failed. Please try again.</span>}
+        {wasPairingSuccessful === false && <span style={{ color: 'red' }}>Pairing failed. Please try again.</span>}
         <DialogButton onClick={() => tryPair()} disabled={ pin.length < 4 || clientName.length < 1 || isWaitingForResponse == true }>
           Pair
         </DialogButton>
