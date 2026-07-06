@@ -9,11 +9,11 @@ export const CredentialsModal: VFC<{
     onLogin: (username: string, password: string) => Promise<boolean | null>;
 }> = ({
         closeModal,
-        onLogin: onLogin,
+        onLogin,
       }) => {
     const [localUsername, setLocalUsername] = useState(localStorage.getItem("decky_sunshine:localUsername") || "decky_sunshine");
     const [localPassword, setLocalPassword] = useState("");
-    const [wasLoginSucessful, setWasLoginSucessful ] = useState<boolean | null>(null);
+    const [wasLoginSuccessful, setWasLoginSuccessful ] = useState<boolean | null>(null);
     const [hadErrorOnLogin, setHadErrorOnLogin ] = useState<boolean>(false);
     const [isWaitingForResponse, setIsWaitingForResponse ] = useState(false);
 
@@ -28,7 +28,7 @@ export const CredentialsModal: VFC<{
       }
 
       setIsWaitingForResponse(false);
-      setWasLoginSucessful(success);
+      setWasLoginSuccessful(success);
       setHadErrorOnLogin(success === null);
     }
 
@@ -39,19 +39,19 @@ export const CredentialsModal: VFC<{
             value={localUsername}
             style={{ width: '20em' }}
             bShowClearAction={localUsername.length > 0}
-            onChange={(e) => {setLocalUsername(e.target.value); setWasLoginSucessful(null);}}
+            onChange={(e) => {setLocalUsername(e.target.value); setWasLoginSuccessful(null);}}
           />
         </Field>
         <Field label="Password">
           <PasswordInput
             value={localPassword}
             style={{ width: '20em' }}
-            onChange={(value) => {setLocalPassword(value); setWasLoginSucessful(null);}}
+            onChange={(value) => {setLocalPassword(value); setWasLoginSuccessful(null);}}
           />
         </Field>
         {hadErrorOnLogin && <span style={{ color: 'red' }}>An error occurred during login. Please try again.</span>}
         {isWaitingForResponse && <span>Waiting for response...</span>}
-        {wasLoginSucessful === false && <span style={{ color: 'red' }}>Login failed. Please try again.</span>}
+        {wasLoginSuccessful === false && <span style={{ color: 'red' }}>Login failed. Please try again.</span>}
         <div style={{ display: 'flex', gap: '0.5em' }}>
           <DialogButton onClick={() => { closeModal?.(); }}>Cancel</DialogButton>
           <DialogButtonPrimary onClick={() => tryLogin()} disabled={ localUsername.length < 1 || localPassword.length < 1 || isWaitingForResponse === true }>

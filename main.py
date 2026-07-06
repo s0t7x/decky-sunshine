@@ -22,7 +22,7 @@ class Plugin:
         return self.settingManager.getSetting(key, default)
 
     async def isSunshineRunning(self):
-        current_is_running = self.sunshineController.isSunshineRunning()
+        current_is_running = await self.sunshineController.isSunshineRunning_async()
         if self._last_is_running != current_is_running:
             decky.logger.info(f"Sunshine running state changed: {self._last_is_running if self._last_is_running is not None else 'unknown'} → {current_is_running if current_is_running is not None else 'unknown'}")
             self._last_is_running = current_is_running
@@ -85,8 +85,8 @@ class Plugin:
         decky.logger.info(f"Credentials found")
         return credentials
 
-    async def getSunshineVersionInfo(self):
-        versionInfo = self.sunshineController.getSunshineVersionInfo()
+    async def getSunshineVersionInfo(self, refresh_appstream = True):
+        versionInfo = await self.sunshineController.getSunshineVersionInfo_async(refresh_appstream)
         if versionInfo:
             last_current_version = self._last_version_info["current_version"] or 'unknown' if self._last_version_info else 'unknown'
             last_update_version = self._last_version_info["update_version"] or 'unknown' if self._last_version_info else 'unknown'

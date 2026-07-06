@@ -33,24 +33,13 @@ class RequestResult:
     data: dict | None
     error: RequestError | None
 
-    def __init__(self, *args, **kwargs):
-        raise RuntimeError("Use factory methods: RequestResult.success() or RequestResult.error()")
+    @classmethod
+    def success(cls, data: dict) -> "RequestResult":
+        return cls(ok=True, data=data, error=None)
 
     @classmethod
-    def success(cls, data: dict):
-        self = object.__new__(cls)
-        object.__setattr__(self, "ok", True)
-        object.__setattr__(self, "data", data)
-        object.__setattr__(self, "error", None)
-        return self
-
-    @classmethod
-    def error(cls, error: RequestError):
-        self = object.__new__(cls)
-        object.__setattr__(self, "ok", False)
-        object.__setattr__(self, "data", None)
-        object.__setattr__(self, "error", error)
-        return self
+    def failure(cls, error: RequestError) -> "RequestResult":
+        return cls(ok=False, data=None, error=error)
 
     def is_unauthorized(self) -> bool:
         return self.error == RequestError.UNAUTHORIZED
@@ -91,7 +80,16 @@ class SunshineController:
         else:
             self.environment_variables["PULSE_SERVER"] = f"unix:{self._findPulseAudioSocketPath()}"
         self.environment_variables["DISPLAY"] = ":0"
-        self.environment_variables["FLATPAK_BWRAP"] = self.environment_variables.get("DECKY_PLUGIN_RUNTIME_DIR", "") + "/bwrap"
+        # bwrap must be setuid root (Sunshine needs CAP_SYS_ADMIN for KMS/DRM
+        # capture, which the setuid copy grants inside the flatpak sandbox) and
+        # it is executed by the root plugin. It must therefore live in a
+        # directory that (a) sits on a suid-capable filesystem and (b) is
+        # writable by root only - otherwise any process running as the deck user
+        # could swap the binary and have it executed as root.
+        # DECKY_PLUGIN_RUNTIME_DIR is owned by (and writable to) deck, and
+        # /run + /tmp are mounted nosuid, so none of those work. /var/lib is
+        # root-owned on a suid-capable ext4 mount, so we use a directory there.
+        self.environment_variables["FLATPAK_BWRAP"] = "/var/lib/decky-sunshine/bwrap"
         self.environment_variables["LD_LIBRARY_PATH"] = "/usr/lib/:" + self.environment_variables.get("LD_LIBRARY_PATH", "")
 
     def setCredentials(self, username, password) -> str:
@@ -140,12 +138,19 @@ class SunshineController:
         )
         return any(line.strip() == self.SunshineFlatpakAppId for line in (result or "").splitlines())
 
+    async def isSunshineRunning_async(self) -> bool:
+        """
+        Async variant of isSunshineRunning that doesn't block the event loop.
+        :return: True if Sunshine is running, False otherwise
+        """
+        return await self._to_thread(self.isSunshineRunning)
+
     async def areCredentialsValid_async(self) -> bool | None:
         """
         Check whether the current credentials are valid by making a request to the Sunshine server.
         :return: True if credentials are valid, False if invalid, None if Sunshine is not running or another error occurred
         """
-        if not self.isSunshineRunning():
+        if not await self.isSunshineRunning_async():
             return None
         res = await self._request_async("/api/apps")
         if res.ok:
@@ -163,18 +168,18 @@ class SunshineController:
             self.logger.info("Decky Sunshine's copy of bwrap was already obtained.")
         else:
             self.logger.info("Decky Sunshine's copy of bwrap is missing. Obtaining now...")
-            installed = self._copyBwrap()
+            installed = await self._to_thread(self._copyBwrap)
             if not installed:
                 self.logger.error("Decky Sunshine's copy of bwrap could not be obtained.")
                 return False
             self.logger.info("Decky Sunshine's copy of bwrap obtained successfully.")
 
-        if self._isSunshineInstalled():
+        if await self._to_thread(self._isSunshineInstalled):
             self.logger.info("Sunshine already installed.")
             return True
         else:
             self.logger.info("Sunshine not installed. Installing...")
-            installed = self._installOrUpdateSunshine()
+            installed = await self._to_thread(self._installOrUpdateSunshine)
             if not installed:
                 self.logger.error("Sunshine could not be installed.")
                 return False
@@ -186,7 +191,7 @@ class SunshineController:
         Start the Sunshine process.
         :return: True if Sunshine was started successfully or is already running, False otherwise
         """
-        if self.isSunshineRunning():
+        if await self.isSunshineRunning_async():
             return True
 
         retry_count = 60
@@ -196,8 +201,8 @@ class SunshineController:
         # or the audio subsystem may not be ready. Thus, we check whether both are available before
         # starting Sunshine.
         while retry_count > 0:
-            display_available = self._isDisplayAvailable()
-            audio_available = self._isAudioAvailable()
+            display_available = await self._to_thread(self._isDisplayAvailable)
+            audio_available = await self._to_thread(self._isAudioAvailable)
 
             if display_available and audio_available:
                 break
@@ -223,21 +228,26 @@ class SunshineController:
         elif display_available:
             self.logger.info("Display available")
 
-        # Set the permissions for our bwrap
         bwrap_path = self.environment_variables["FLATPAK_BWRAP"]
 
-        if not self._run_and_check(['chown', '0:0', bwrap_path], context="setting owner on bwrap to root"):
+        # Re-copy bwrap from the trusted system binary on every start (this also
+        # picks up bwrap updates from the OS) and make it setuid root, which
+        # Sunshine needs for KMS/DRM capture. This is safe because the target
+        # directory is writable by root only (see __init__).
+        if not await self._to_thread(self._copyBwrap):
             return False
 
-        if not self._run_and_check(['chmod', 'u+s', bwrap_path], context="setting setuid on bwrap"):
+        if not await self._to_thread(lambda: self._run_and_check(['chown', '0:0', bwrap_path], context="setting owner on bwrap to root")):
+            return False
+
+        if not await self._to_thread(lambda: self._run_and_check(['chmod', 'u+s', bwrap_path], context="setting setuid on bwrap")):
             return False
 
         # Run Sunshine
         try:
-            subprocess.Popen(f"sh -c 'flatpak run --system --socket=wayland {self.SunshineFlatpakAppId}'",
+            subprocess.Popen(["flatpak", "run", "--system", "--socket=wayland", self.SunshineFlatpakAppId],
                              env=self.environment_variables,
-                             shell=True,
-                             preexec_fn=os.setsid)
+                             start_new_session=True)
         except Exception as e:
             self.logger.exception("An error occurred when starting Sunshine", exc_info=e)
             return False
@@ -245,7 +255,7 @@ class SunshineController:
         # Wait for Sunshine to start
         retry_count = 20
         wait_time = 0.25
-        while not self.isSunshineRunning() and retry_count > 0:
+        while not await self.isSunshineRunning_async() and retry_count > 0:
             retry_count -= 1
             if retry_count == 0:
                 self.logger.error("Aborting wait for Sunshine process to start.")
@@ -260,14 +270,14 @@ class SunshineController:
         Stop the Sunshine process.
         :return: True if Sunshine was stopped successfully or wasn't running, False otherwise
         """
-        if not self.isSunshineRunning():
+        if not await self.isSunshineRunning_async():
             return True
 
-        self._run_and_check(["flatpak", "kill", self.SunshineFlatpakAppId], context="killing Sunshine via flatpak")
+        await self._to_thread(lambda: self._run_and_check(["flatpak", "kill", self.SunshineFlatpakAppId], context="killing Sunshine via flatpak"))
 
         retry_count = 20
         wait_time = 0.25
-        while self.isSunshineRunning() and retry_count > 0:
+        while await self.isSunshineRunning_async() and retry_count > 0:
             retry_count -= 1
             if retry_count == 0:
                 self.logger.error("Aborting wait for Sunshine process to end.")
@@ -316,9 +326,17 @@ class SunshineController:
 
         return count_after == count_before + 1
 
-    def getSunshineVersionInfo(self) -> dict | None:
+    async def getSunshineVersionInfo_async(self, refresh_appstream: bool = True) -> dict | None:
+        """
+        Async variant of getSunshineVersionInfo that doesn't block the event loop.
+        """
+        return await self._to_thread(lambda: self.getSunshineVersionInfo(refresh_appstream))
+
+    def getSunshineVersionInfo(self, refresh_appstream: bool = True) -> dict | None:
         """
         Get the current and available update version of Sunshine.
+        :param refresh_appstream: Whether to refresh the Flatpak appstream data (requires network access
+                                  and can take a while) before checking for an update
         :return: A dict with keys 'current_version' and 'update_version', or None if an error occurred
         """
         info_result = self._run_and_capture_stdout(
@@ -331,7 +349,8 @@ class SunshineController:
             for (_, version) in (line.split(":", 1) for line in info_result.splitlines() if "Version:" in line):
                 current_version = version.strip()
 
-        self._run_and_check(['flatpak', 'update', '--appstream'], context="refreshing Flatpak appstream data")
+        if refresh_appstream:
+            self._run_and_check(['flatpak', 'update', '--appstream'], context="refreshing Flatpak appstream data")
 
         result = self._run_and_capture_stdout(
             ["flatpak", "remote-ls", "--app", "--updates", "--system", "--columns=application,version"],
@@ -340,8 +359,9 @@ class SunshineController:
 
         update_version = None
         if result:
-            for (_, version) in (line.split() for line in result.splitlines() if self.SunshineFlatpakAppId in line):
-                update_version = version.strip()
+            # The version column can be empty, in which case the line only contains the application id
+            for columns in (line.split() for line in result.splitlines() if self.SunshineFlatpakAppId in line):
+                update_version = columns[1] if len(columns) > 1 else None
 
         return {
             "current_version": current_version,
@@ -358,7 +378,7 @@ class SunshineController:
             self.logger.error("Couldn't stop Sunshine for update")
             return False
         self.logger.info("Sunshine stopped for update. Installing update now...")
-        installed = self._installOrUpdateSunshine()
+        installed = await self._to_thread(self._installOrUpdateSunshine)
         if not installed:
             self.logger.error("Couldn't update Sunshine")
             return False
@@ -404,6 +424,15 @@ class SunshineController:
         proc = self._run(args, context)
         return proc.stdout if proc else None
 
+    async def _to_thread(self, func):
+        """
+        Run a blocking callable in the default executor so it doesn't block the event loop.
+        :param func: The callable to run (without arguments; use a lambda to bind arguments)
+        :return: The return value of the callable
+        """
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, func)
+
     async def _request_async(self, path, data=None) -> RequestResult:
         """
         Make an async HTTP request to the Sunshine server.
@@ -423,20 +452,22 @@ class SunshineController:
         """
         try:
             request = self._createRequest(path, data)
-            with self.opener.open(request) as response:
+            # The timeout must be passed here: OpenerDirector.open() unconditionally
+            # overwrites a timeout attribute set on the Request object.
+            with self.opener.open(request, timeout=5) as response:
                 if response.getcode() != OK:
                     self.logger.error(f"Request to path '{path}' with data '{data}' failed with code: {response.getcode()}")
-                    return RequestResult.error(RequestError.OTHER)
+                    return RequestResult.failure(RequestError.OTHER)
                 encoding = response.headers.get_content_charset() or "utf-8"
                 content = response.read().decode(encoding)
                 return RequestResult.success(json.loads(content))
 
         except HTTPError as e:
             if e.code == UNAUTHORIZED:
-                return RequestResult.error(RequestError.UNAUTHORIZED)
+                return RequestResult.failure(RequestError.UNAUTHORIZED)
             else:
                 self.logger.error(f"HTTP error in request to path '{path}' with data '{data}', code: {e.code}, reason: {e.reason}")
-                return RequestResult.error(RequestError.OTHER)
+                return RequestResult.failure(RequestError.OTHER)
 
         except URLError as e:
             # Check if the reason is a connection refusal,
@@ -445,14 +476,14 @@ class SunshineController:
                 isinstance(e.reason, OSError) and getattr(e.reason, "errno", None) == 111
             ):
                 self.logger.error(f"Server not reachable when requesting path '{path}' with data '{data}': Connection refused")
-                return RequestResult.error(RequestError.UNREACHABLE)
+                return RequestResult.failure(RequestError.UNREACHABLE)
             else:
                 self.logger.error(f"URL error in request to path '{path}' with data '{data}', reason: {e.reason}")
-                return RequestResult.error(RequestError.OTHER)
+                return RequestResult.failure(RequestError.OTHER)
 
         except Exception as e:
             self.logger.exception(f"An error occurred when performing a request to path '{path}' with data '{data}'", exc_info=e)
-            return RequestResult.error(RequestError.OTHER)
+            return RequestResult.failure(RequestError.OTHER)
 
     def _createRequest(self, path, data=None) -> Request:
         """
@@ -464,7 +495,6 @@ class SunshineController:
         sunshineBaseUrl = "https://127.0.0.1:47990"
         url = sunshineBaseUrl + path
         request = Request(url)
-        request.timeout = 5
         request.add_header("User-Agent", "decky-sunshine")
         request.add_header("Connection", "keep-alive")
         request.add_header("Accept", "application/json, */*; q=0.01")
@@ -602,10 +632,11 @@ class SunshineController:
             data = json.loads(result or "{}")
         except Exception as e:
             self.logger.exception("An error occurred when parsing the output of drm_info", exc_info=e)
+            data = None
 
         data = data or {}
         for _, card in data.items():
-            for connector in card.get("crtcs", []):
+            for crtc in card.get("crtcs", []):
                 # Sunshine checks for the crtcs of a plane with a fb_id that is not 0.
                 # https://github.com/LizardByte/Sunshine/blob/6ab24491ed0463eb60c8b902e018d98be3afd06b/src/platform/linux/kmsgrab.cpp#L1620
                 # If the fb_id is 0, the crtc will be skipped.
@@ -616,7 +647,7 @@ class SunshineController:
                 # and there was no fb_id != 0 directly after start, but only later. Thus,
                 # it should be sufficient to find a single fb_id != 0 to determine that
                 # Sunshine should be able to find a display as well.
-                if connector.get("fb_id", 0) != 0:
+                if crtc.get("fb_id", 0) != 0:
                     return True
         return False
 
@@ -689,12 +720,22 @@ class SunshineController:
 
     def _copyBwrap(self) -> bool:
         """
-        Copy the bwrap binary to the expected location.
+        Copy the bwrap binary to its dedicated root-owned directory.
         :return: True if the copy was successful, False otherwise
         """
+        bwrap_path = self.environment_variables["FLATPAK_BWRAP"]
+        bwrap_dir = os.path.dirname(bwrap_path)
+        try:
+            os.makedirs(bwrap_dir, exist_ok=True)
+            # makedirs is subject to the umask, so set the mode explicitly: the
+            # directory must not be writable by anyone but root.
+            os.chmod(bwrap_dir, 0o755)
+        except Exception as e:
+            self.logger.exception("An error occurred when creating the bwrap directory", exc_info=e)
+            return False
         return self._run_and_check(
-                ["cp", "/usr/bin/bwrap", self.environment_variables["FLATPAK_BWRAP"]],
-                context="copying bwrap to Decky Plugin Runtime directory"
+                ["cp", "/usr/bin/bwrap", bwrap_path],
+                context="copying bwrap to its dedicated directory"
         )
 
     def _installOrUpdateSunshine(self) -> bool:

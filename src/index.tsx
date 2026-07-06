@@ -16,12 +16,12 @@ import { LOG_TAG } from "./util/constants";
 
 const Content: VFC = () => {
   const HEALTH_CHECK_INTERVAL = 5000;
-  const STATE_UPDATE_INTERVAL = 1000;
 
   // State
   const [isSunshineRunning, setIsSunshineRunning] = useState<boolean>(false);
   const [areCredentialsValid, setAreCredentialsValid] = useState<boolean | null>(null);
-  const [shouldSunshineRun, setShouldSunshineRun] = useState<boolean>(false);
+  // The run state Sunshine is currently transitioning to, or null if no transition is in progress
+  const [pendingRunState, setPendingRunState] = useState<boolean | null>(null);
   const [sunshineCurrentVersion, setSunshineCurrentVersion] = useState<string | null>(null);
   const [sunshineUpdateVersion, setSunshineUpdateVersion] = useState<string | null>(null);
   const [updateCheckTriggeredManually, setUpdateCheckTriggeredManually] = useState<boolean>(false);
@@ -40,84 +40,61 @@ const Content: VFC = () => {
   };
 
   useEffect(() => {
-    const initializeIsSunshineRunning = async () => {
-      const isSunshineRunning = await backend.isSunshineRunning();
-
-      // On startup, the backend will load the lastRunState and start Sunshine if it ran before.
-      // Thus, we check the state of Sunshine and update the local state accordingly.
-      setIsSunshineRunning(isSunshineRunning);
-      setShouldSunshineRun(isSunshineRunning);
+    const initialize = async () => {
+      await updateSunshineState();
       setIsInitializing(false);
     };
 
-    initializeIsSunshineRunning();
+    initialize();
   }, []);
 
   useEffect(() => {
-    const initializeAreCredentialsValid = async () => {
-      const areCredentialsValid = await backend.areCredentialsValid();
-
-      setAreCredentialsValid(areCredentialsValid);
-    };
-
-    initializeAreCredentialsValid();
+    refreshVersionInfo(false);
   }, []);
 
   useEffect(() => {
-    refreshVersionInfo();
-  }, []);
-
-  useEffect(() => {
-    const healthCheck = setInterval(async () => {
-      const hasDesiredState = shouldSunshineRun === isSunshineRunning;
-      if (hasDesiredState) {
-        await updateSunshineState();
-      }
-    }, HEALTH_CHECK_INTERVAL);
-
-    return () => clearInterval(healthCheck);
-  }, []);
-
-  useEffect(() => {
-    // Start or stop Sunshine if wanted
-    const hasDesiredState = shouldSunshineRun === isSunshineRunning;
-    if (hasDesiredState) {
+    // Pause the health check while a transition is in progress;
+    // toggleSunshine updates the state itself when it finishes.
+    if (pendingRunState !== null) {
       return;
     }
 
-    const startStopOperation = async () => {
-      try {
-        shouldSunshineRun ? await backend.startSunshine() : await backend.stopSunshine();
-      } catch (error) {
-        console.error(LOG_TAG, "Failed to start/stop Sunshine:", error);
-        // Reset to the previous state on error
-        setShouldSunshineRun(isSunshineRunning);
+    const healthCheck = setInterval(updateSunshineState, HEALTH_CHECK_INTERVAL);
+
+    return () => clearInterval(healthCheck);
+  }, [pendingRunState]);
+
+  const toggleSunshine = async () => {
+    const shouldRun = !isSunshineRunning;
+    setPendingRunState(shouldRun);
+    try {
+      // The backend call only returns once Sunshine has actually been
+      // started/stopped (or the operation failed or timed out)
+      const success = shouldRun ? await backend.startSunshine() : await backend.stopSunshine();
+      if (!success) {
+        console.error(LOG_TAG, `Failed to ${shouldRun ? "start" : "stop"} Sunshine`);
       }
-    };
+    } catch (error) {
+      console.error(LOG_TAG, "Failed to start/stop Sunshine:", error);
+    } finally {
+      await updateSunshineState();
+      setPendingRunState(null);
+    }
+  };
 
-    startStopOperation();
-
-    // Update state each second till loading is done
-    const interval = setInterval(async () => {
-      const isSunshineRunning = await backend.isSunshineRunning();
-      const hasDesiredState = shouldSunshineRun === isSunshineRunning;
-      hasDesiredState ? clearInterval(interval) : updateSunshineState();
-    }, STATE_UPDATE_INTERVAL);
-
-    // Cleanup interval to avoid memory leaks
-    return () => clearInterval(interval);
-  }, [shouldSunshineRun]);
-
-  const refreshVersionInfo = async () => {
+  const refreshVersionInfo = async (refreshAppstream: boolean) => {
     setIsRefreshingVersionInfo(true);
-    const versionInfo = await backend.getSunshineVersionInfo();
-    setIsRefreshingVersionInfo(false);
-    setSunshineCurrentVersion(versionInfo?.current_version ?? null);
-    setSunshineUpdateVersion(versionInfo?.update_version ?? null);
+    try {
+      const versionInfo = await backend.getSunshineVersionInfo(refreshAppstream);
+      setSunshineCurrentVersion(versionInfo?.current_version ?? null);
+      setSunshineUpdateVersion(versionInfo?.update_version ?? null);
+    } finally {
+      setIsRefreshingVersionInfo(false);
+    }
   };
 
   // Show spinner while Sunshine state is being updated or an update is in progress
-  const isStartingOrStopping = shouldSunshineRun !== isSunshineRunning;
+  const isStartingOrStopping = pendingRunState !== null;
   const isBusy = isInitializing || isStartingOrStopping || isUpdating;
   const statusInfo = (() => {
     if (isInitializing) {
@@ -128,7 +105,7 @@ const Content: VFC = () => {
     }
     if (isStartingOrStopping) {
       return {
-        label: shouldSunshineRun ? "Starting..." : "Stopping...",
+        label: pendingRunState ? "Starting..." : "Stopping...",
         color: "orange",
       };
     }
@@ -164,7 +141,7 @@ const Content: VFC = () => {
           </div>
           <ButtonItem
             disabled={isBusy}
-            onClick={() => setShouldSunshineRun(!isSunshineRunning)}
+            onClick={() => toggleSunshine()}
           >
             {isSunshineRunning ? "Stop Sunshine" : "Start Sunshine"}
           </ButtonItem>
@@ -249,27 +226,30 @@ const Content: VFC = () => {
                   disabled={isStartingOrStopping || isUpdating}
                   onClick={async () => {
                     setIsUpdating(true);
-                    const success = await backend.updateSunshine();
-                    setIsUpdating(false);
-                    if (success) {
-                      setSunshineUpdateVersion(null);
-                      setUpdateCheckTriggeredManually(false);
+                    try {
+                      const success = await backend.updateSunshine();
+                      if (success) {
+                        setSunshineUpdateVersion(null);
+                        setUpdateCheckTriggeredManually(false);
+                      }
+                      updateSunshineState();
+                    } finally {
+                      setIsUpdating(false);
                     }
-                    updateSunshineState();
                   }}
                 >
                   Update
                 </ButtonItem>
               </div>
            : <div style={{ display: "contents" }}>
-                {updateCheckTriggeredManually && sunshineUpdateVersion == null && (
+                {updateCheckTriggeredManually && !isRefreshingVersionInfo && (
                   <span>No update available</span>
                 )}
                 <ButtonItem
                   disabled={isRefreshingVersionInfo}
                   onClick={async () => {
                     setUpdateCheckTriggeredManually(true);
-                    await refreshVersionInfo();
+                    await refreshVersionInfo(true);
                   }}
                 >
                   Check for Sunshine update
@@ -299,10 +279,13 @@ const Content: VFC = () => {
                   onClick={async () => {
                     setIsGettingCredentials(true);
                     setGetCredentialsReturnedValue(null);
-                    const credentials = await backend.getCredentials();
-                    setCredentials(credentials);
-                    setGetCredentialsReturnedValue(credentials != null);
-                    setIsGettingCredentials(false);
+                    try {
+                      const credentials = await backend.getCredentials();
+                      setCredentials(credentials);
+                      setGetCredentialsReturnedValue(credentials != null);
+                    } finally {
+                      setIsGettingCredentials(false);
+                    }
                   }}
                 >
                   Show credentials
