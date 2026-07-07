@@ -202,7 +202,7 @@ class SunshineController:
             # still (re)apply the composition override so the atom matches the setting.
             if self.force_composition:
                 self.logger.info("Forcing gamescope composition for streaming")
-                self.setCompositionForce(True)
+                await self.setCompositionForce_async(True)
             return True
 
         retry_count = 60
@@ -276,7 +276,7 @@ class SunshineController:
 
         if self.force_composition:
             self.logger.info("Forcing gamescope composition for streaming")
-            self.setCompositionForce(True)
+            await self.setCompositionForce_async(True)
 
         return True
 
@@ -285,9 +285,14 @@ class SunshineController:
         Stop the Sunshine process.
         :return: True if Sunshine was stopped successfully or wasn't running, False otherwise
         """
-        # Always release the gamescope composition override when stopping, so the
+        # Release the gamescope composition override when stopping, so the
         # direct-scanout power optimization is restored once we're not streaming.
-        self.setCompositionForce(False)
+        # Only when the override is active: otherwise every stop would spawn a
+        # su/xprop subprocess (and log an error on systems where that fails)
+        # even though the feature was never enabled. Disabling the toggle while
+        # Sunshine is running is already handled live in setForceComposition.
+        if self.force_composition:
+            await self.setCompositionForce_async(False)
 
         if not await self.isSunshineRunning_async():
             return True
@@ -336,6 +341,12 @@ class SunshineController:
         return self._run_and_check(
             cmd, context=f"setting GAMESCOPE_COMPOSITE_FORCE={value}"
         )
+
+    async def setCompositionForce_async(self, enabled: bool) -> bool:
+        """
+        Async variant of setCompositionForce that doesn't block the event loop.
+        """
+        return await self._to_thread(lambda: self.setCompositionForce(enabled))
 
     async def pair_async(self, pin, client_name) -> bool:
         """

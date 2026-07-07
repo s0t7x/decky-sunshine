@@ -56,8 +56,8 @@ class Plugin:
         """
         self.settingManager.setSetting("forceComposition", enabled)
         self.sunshineController.force_composition = enabled
-        if self.sunshineController.isSunshineRunning():
-            self.sunshineController.setCompositionForce(enabled)
+        if await self.sunshineController.isSunshineRunning_async():
+            await self.sunshineController.setCompositionForce_async(enabled)
         decky.logger.info(f"forceComposition set to {enabled}")
         return enabled
 
