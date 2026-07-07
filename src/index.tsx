@@ -13,6 +13,7 @@ import backend from "./util/backend";
 
 import { PairingModal } from "./components/PairingModal";
 import { CredentialsModal } from "./components/CredentialsModal";
+import { LabelWithInfo } from "./components/LabelWithInfo";
 import { LOG_TAG } from "./util/constants";
 
 const Content: VFC = () => {
@@ -33,6 +34,7 @@ const Content: VFC = () => {
   const [isGettingCredentials, setIsGettingCredentials] = useState<boolean>(false);
   const [getCredentialsReturnedValue, setGetCredentialsReturnedValue] = useState<boolean | null>(null);
   const [forceComposition, setForceComposition] = useState<boolean>(false);
+  const [showCompositionHelp, setShowCompositionHelp] = useState<boolean>(false);
 
   const updateSunshineState = async () => {
     const isSunshineRunning = await backend.isSunshineRunning();
@@ -220,8 +222,10 @@ const Content: VFC = () => {
       {/* Streaming fix: force gamescope composition (docked stretched capture) */}
       <PanelSectionRow>
         <ToggleField
-          label="Fix stretched image when docked"
-          description="Fixes the docked glitch where the picture is squeezed into part of the screen with the right side stretched across the rest. Might impact performance."
+          label={<LabelWithInfo title="Fix image when docked" onToggleHelp={() => setShowCompositionHelp(value => !value)} />}
+          description={showCompositionHelp
+            ? "Fixes the stream being squeezed into part of the screen while docked. May slightly increase GPU load while Sunshine is running."
+            : undefined}
           checked={forceComposition}
           onChange={(value: boolean) => {
             setForceComposition(value);
