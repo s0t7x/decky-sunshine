@@ -46,6 +46,24 @@ class Plugin:
             self.settingManager.setSetting("lastRunState", "stop")
         return res
 
+    async def setForceComposition(self, enabled):
+        """
+        Persist the "force gamescope composition while streaming" toggle. The
+        controller applies it on its next start_async and clears it on stop_async;
+        also apply immediately if Sunshine is already running. Fixes the docked
+        capture glitch where the image is squeezed into part of the screen with
+        the right side stretched across the rest.
+        """
+        self.settingManager.setSetting("forceComposition", enabled)
+        self.sunshineController.force_composition = enabled
+        if self.sunshineController.isSunshineRunning():
+            self.sunshineController.setCompositionForce(enabled)
+        decky.logger.info(f"forceComposition set to {enabled}")
+        return enabled
+
+    async def getForceComposition(self):
+        return self.settingManager.getSetting("forceComposition", False)
+
     async def stopSunshine(self):
         decky.logger.info("Stopping sunshine...")
         res = await self.sunshineController.stop_async()
@@ -139,6 +157,10 @@ class Plugin:
             else:
                 decky.logger.info("Setting auth header from settings")
                 self.sunshineController.authHeader = lastAuthHeader
+
+        # Carry the persisted "force composition while streaming" preference into
+        # the controller so the auto-start below (and any later start) applies it.
+        self.sunshineController.force_composition = self.settingManager.getSetting("forceComposition", False)
 
         lastRunState = self.settingManager.getSetting("lastRunState", "")
         if lastRunState in ("start", ""):

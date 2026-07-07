@@ -61,6 +61,16 @@ class Backend {
         return result === true;
     }
 
+    public getForceComposition = async (): Promise<boolean> => {
+        const result = await this.call<boolean>("getForceComposition");
+        return result === true;
+    }
+
+    public setForceComposition = async (enabled: boolean): Promise<boolean> => {
+        const result = await this.call<{ enabled: boolean }, boolean>("setForceComposition", { enabled });
+        return result === true;
+    }
+
     private call<TRes>(method: string): Promise<TRes | null>;
     private call<TArgs, TRes>(method: string, args: TArgs): Promise<TRes | null>;
     private async call(method: string, args?: unknown): Promise<unknown | null>{

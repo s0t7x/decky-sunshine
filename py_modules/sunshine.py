@@ -64,6 +64,12 @@ class SunshineController:
         assert logger is not None
         self.logger = logger
 
+        # Whether to force gamescope composition (vs direct scanout) while
+        # streaming. Applied at the end of start_async and cleared in stop_async,
+        # so every start/stop path is covered regardless of caller. See
+        # setCompositionForce() for the why.
+        self.force_composition = False
+
         sslContext = ssl.create_default_context()
         sslContext.check_hostname = False
         sslContext.verify_mode = ssl.CERT_NONE
@@ -192,6 +198,11 @@ class SunshineController:
         :return: True if Sunshine was started successfully or is already running, False otherwise
         """
         if await self.isSunshineRunning_async():
+            # Already running (e.g. it survived a plugin_loader restart via setsid):
+            # still (re)apply the composition override so the atom matches the setting.
+            if self.force_composition:
+                self.logger.info("Forcing gamescope composition for streaming")
+                self.setCompositionForce(True)
             return True
 
         retry_count = 60
@@ -263,6 +274,10 @@ class SunshineController:
             self.logger.info(f"Sunshine process not found yet. Checking again in {wait_time} {'second' if wait_time == 1 else 'seconds'}")
             await asyncio.sleep(wait_time)
 
+        if self.force_composition:
+            self.logger.info("Forcing gamescope composition for streaming")
+            self.setCompositionForce(True)
+
         return True
 
     async def stop_async(self) -> bool:
@@ -270,6 +285,10 @@ class SunshineController:
         Stop the Sunshine process.
         :return: True if Sunshine was stopped successfully or wasn't running, False otherwise
         """
+        # Always release the gamescope composition override when stopping, so the
+        # direct-scanout power optimization is restored once we're not streaming.
+        self.setCompositionForce(False)
+
         if not await self.isSunshineRunning_async():
             return True
 
@@ -287,6 +306,36 @@ class SunshineController:
             await asyncio.sleep(wait_time)
 
         return True
+
+    def setCompositionForce(self, enabled: bool) -> bool:
+        """
+        Force gamescope to always composite instead of using its direct-scanout
+        (single-plane) optimization, by setting the GAMESCOPE_COMPOSITE_FORCE
+        root-window atom on its XWayland display.
+
+        Why this exists: in Game Mode (embedded gamescope) the `--force-composition`
+        flag and gamescopectl convars are ignored — root-window atoms override them.
+        When gamescope drops to direct scanout of a smaller buffer (e.g. when the
+        mouse cursor auto-hides), Sunshine's KMS capture streams that stretched and
+        mis-scaled — most visibly when docked, where the image is squeezed into part
+        of the external screen with the right side stretched across the rest.
+        Forcing composition keeps the captured geometry consistent.
+
+        It is applied on stream start and cleared on stop, so gamescope's
+        power-saving direct scanout is only disabled while actually streaming.
+
+        Sunshine runs as root, so the atom must be set as the session user (`deck`)
+        on DISPLAY :0.
+        """
+        value = "1" if enabled else "0"
+        cmd = [
+            "su", "deck", "-c",
+            "DISPLAY=:0 xprop -root -f GAMESCOPE_COMPOSITE_FORCE 32c "
+            "-set GAMESCOPE_COMPOSITE_FORCE " + value,
+        ]
+        return self._run_and_check(
+            cmd, context=f"setting GAMESCOPE_COMPOSITE_FORCE={value}"
+        )
 
     async def pair_async(self, pin, client_name) -> bool:
         """

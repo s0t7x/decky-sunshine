@@ -4,6 +4,7 @@ import {
   PanelSection,
   PanelSectionRow,
   ButtonItem,
+  ToggleField,
   Spinner,
   showModal,
 } from "decky-frontend-lib";
@@ -31,6 +32,7 @@ const Content: VFC = () => {
   const [credentials, setCredentials] = useState<{username: string, password: string} | null>(null);
   const [isGettingCredentials, setIsGettingCredentials] = useState<boolean>(false);
   const [getCredentialsReturnedValue, setGetCredentialsReturnedValue] = useState<boolean | null>(null);
+  const [forceComposition, setForceComposition] = useState<boolean>(false);
 
   const updateSunshineState = async () => {
     const isSunshineRunning = await backend.isSunshineRunning();
@@ -50,6 +52,10 @@ const Content: VFC = () => {
 
   useEffect(() => {
     refreshVersionInfo(false);
+  }, []);
+
+  useEffect(() => {
+    backend.getForceComposition().then(setForceComposition);
   }, []);
 
   useEffect(() => {
@@ -209,6 +215,19 @@ const Content: VFC = () => {
           >
             Pair Client
           </ButtonItem>
+      </PanelSectionRow>
+
+      {/* Streaming fix: force gamescope composition (docked stretched capture) */}
+      <PanelSectionRow>
+        <ToggleField
+          label="Fix stretched image when docked"
+          description="Fixes the docked glitch where the picture is squeezed into part of the screen with the right side stretched across the rest. Might impact performance."
+          checked={forceComposition}
+          onChange={(value: boolean) => {
+            setForceComposition(value);
+            backend.setForceComposition(value);
+          }}
+        />
       </PanelSectionRow>
 
       {/* Update Section */}
