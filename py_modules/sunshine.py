@@ -329,18 +329,48 @@ class SunshineController:
         It is applied on stream start and cleared on stop, so gamescope's
         power-saving direct scanout is only disabled while actually streaming.
 
-        Sunshine runs as root, so the atom must be set as the session user (`deck`)
+        Sunshine runs as root, so the atom must be set as the session user
         on DISPLAY :0.
         """
         value = "1" if enabled else "0"
+        username = self._getSessionUsername()
+        if not username:
+            self.logger.warning(f"No session user found for setting GAMESCOPE_COMPOSITE_FORCE={value}")
+            return False
         cmd = [
-            "su", "deck", "-c",
+            "su", username, "-c",
             "DISPLAY=:0 xprop -root -f GAMESCOPE_COMPOSITE_FORCE 32c "
             "-set GAMESCOPE_COMPOSITE_FORCE " + value,
         ]
         return self._run_and_check(
             cmd, context=f"setting GAMESCOPE_COMPOSITE_FORCE={value}"
         )
+
+    def _getSessionUsername(self) -> str | None:
+        """
+        Determine the user owning the gamescope session. On the Steam Deck this
+        is 'deck', but as in the audio socket discovery it must not be
+        hardcoded: other systems may use a different user, so fall back to the
+        owner of the first regular user's runtime directory.
+        :return: The username, or None if no regular user was found
+        """
+        try:
+            return pwd.getpwnam("deck").pw_name
+        except KeyError:
+            pass
+
+        # Sort numerically by UID for a reproducible search order, as in
+        # _expandSocketPattern
+        uid_matches = (re.match(r"^/run/user/(\d+)$", path) for path in glob.glob("/run/user/*"))
+        uids = sorted(int(match.group(1)) for match in uid_matches if match)
+        for uid in uids:
+            if uid < 1000:
+                continue
+            try:
+                return pwd.getpwuid(uid).pw_name
+            except KeyError:
+                continue
+        return None
 
     async def setCompositionForce_async(self, enabled: bool) -> bool:
         """
