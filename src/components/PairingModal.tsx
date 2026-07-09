@@ -1,9 +1,9 @@
-import { ChangeEvent, VFC } from 'react'
-import { DialogButton, TextField, ModalRoot, Field } from "decky-frontend-lib";
+import { ChangeEvent, FC } from 'react'
+import { DialogButton, TextField, ModalRoot, Field } from "@decky/ui";
 import { playSound } from "../util/util";
 import { useState } from "react";
 
-export const PairingModal: VFC<{
+export const PairingModal: FC<{
     closeModal?: () => void;
     onPair: (pin: string, clientName: string) => Promise<boolean>;
 }> = ({
