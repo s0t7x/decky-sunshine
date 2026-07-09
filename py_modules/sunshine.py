@@ -1,4 +1,6 @@
 import shlex
+import shutil
+import stat
 import subprocess
 import os
 import base64
@@ -169,6 +171,130 @@ class SunshineController:
             return False
         return None
 
+    async def logEnvironment_async(self) -> None:
+        """
+        Async variant of logEnvironment that doesn't block the event loop.
+        """
+        await self._to_thread(self.logEnvironment)
+
+    def logEnvironment(self) -> None:
+        """
+        Log a compact block describing the runtime environment and check the
+        Steam-Deck-specific assumptions this plugin makes. Decky also runs on
+        Bazzite, ChimeraOS, Nobara etc., where individual assumptions can
+        fail; surface that in the log at startup instead of failing in
+        non-obvious ways later. Purely informational: never aborts loading.
+        """
+        try:
+            os_release = self._readOsRelease()
+            os_id = os_release.get("ID", "unknown")
+            self.logger.info(f"Environment: OS: {os_release.get('PRETTY_NAME', 'unknown')} (ID={os_id})")
+            if os_id != "steamos":
+                self.logger.warning("OS is not SteamOS - this plugin makes Steam-Deck-specific assumptions that may not hold here")
+
+            vendor = self._readFirstLine("/sys/class/dmi/id/board_vendor") or "unknown"
+            product = self._readFirstLine("/sys/class/dmi/id/product_name") or "unknown"
+            self.logger.info(f"Environment: Hardware: {vendor} {product}, Kernel: {os.uname().release}")
+            if vendor != "Valve":
+                self.logger.warning("Hardware is not a Valve device - display/audio detection may behave differently")
+
+            username = self._getSessionUsername()
+            if username:
+                self.logger.info(f"Environment: Session user: {username}")
+            else:
+                self.logger.error("No session user found (no user 'deck', no /run/user/<uid> with uid >= 1000) - audio discovery and the composition override will fail")
+
+            self.logger.info(
+                f"Environment: DISPLAY: {self.environment_variables.get('DISPLAY')} (assumed), "
+                f"PULSE_SERVER: {self.environment_variables.get('PULSE_SERVER')}"
+            )
+
+            # Tools invoked via subprocess; without the required ones Sunshine
+            # cannot be installed or started at all
+            required_tools = ["flatpak", "cp", "chown", "chmod", "drm_info"]
+            composition_tools = ["su", "xprop"]
+            path = self.environment_variables.get("PATH", os.defpath)
+            missing_required = [tool for tool in required_tools if shutil.which(tool, path=path) is None]
+            missing_composition = [tool for tool in composition_tools if shutil.which(tool, path=path) is None]
+            if missing_required:
+                self.logger.error(f"Missing required tools: {', '.join(missing_required)} - Sunshine cannot be installed/started")
+            if missing_composition:
+                self.logger.warning(f"Missing tools needed only for the force-composition toggle: {', '.join(missing_composition)}")
+            if not missing_required and not missing_composition:
+                self.logger.info(f"Environment: Tools: all present ({', '.join(required_tools + composition_tools)})")
+
+            if not os.path.isfile("/usr/bin/bwrap"):
+                self.logger.error("/usr/bin/bwrap not found - cannot create the setuid bwrap copy Sunshine needs for KMS capture")
+
+            bwrap_dir = os.path.dirname(self.environment_variables["FLATPAK_BWRAP"])
+            mount = self._findMountEntry(bwrap_dir)
+            if mount is None:
+                self.logger.warning(f"Could not determine the mount hosting {bwrap_dir}")
+            else:
+                mount_point, fstype, options = mount
+                nosuid = "nosuid" in options.split(",")
+                self.logger.info(f"Environment: bwrap copy target {bwrap_dir}: mount {mount_point} ({fstype}{', nosuid' if nosuid else ''})")
+                if nosuid:
+                    self.logger.error(
+                        f"{mount_point} is mounted nosuid - the setuid bwrap copy will not work there "
+                        "and Sunshine will not be able to capture the display"
+                    )
+        except Exception as e:
+            self.logger.exception("An error occurred when logging the environment", exc_info=e)
+
+    def _readOsRelease(self) -> dict:
+        """
+        Parse /etc/os-release into a dict (values unquoted).
+        :return: The parsed key/value pairs, or an empty dict if unreadable
+        """
+        entries = {}
+        try:
+            with open("/etc/os-release") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, value = line.split("=", 1)
+                    entries[key] = value.strip().strip('"')
+        except Exception as e:
+            self.logger.exception("An error occurred when reading /etc/os-release", exc_info=e)
+        return entries
+
+    def _readFirstLine(self, path: str) -> str | None:
+        """
+        Read the first line of a file, e.g. a DMI attribute.
+        :return: The stripped first line, or None if unreadable
+        """
+        try:
+            with open(path) as f:
+                return f.readline().strip()
+        except OSError:
+            return None
+
+    def _findMountEntry(self, path: str) -> tuple[str, str, str] | None:
+        """
+        Find the mount responsible for the given path (the path does not have
+        to exist yet) via the longest matching mount point in /proc/self/mounts.
+        :return: A tuple (mount_point, fstype, options), or None if it could not be determined
+        """
+        try:
+            real_path = os.path.realpath(path)
+            best = None
+            with open("/proc/self/mounts") as f:
+                for line in f:
+                    fields = line.split()
+                    if len(fields) < 4:
+                        continue
+                    # Special characters in mount points are octal-escaped (e.g. \040 for space)
+                    mount_point = re.sub(r"\\([0-7]{3})", lambda m: chr(int(m.group(1), 8)), fields[1])
+                    if real_path == mount_point or real_path.startswith(mount_point.rstrip("/") + "/"):
+                        if best is None or len(mount_point) > len(best[0]):
+                            best = (mount_point, fields[2], fields[3])
+            return best
+        except Exception as e:
+            self.logger.exception(f"An error occurred when looking up the mount for {path}", exc_info=e)
+            return None
+
     async def ensureDependencies_async(self) -> bool:
         """
         Ensure that Sunshine and the environment are set up as expected, installing Sunshine if necessary.
@@ -256,6 +382,13 @@ class SunshineController:
             return False
 
         if not await self._to_thread(lambda: self._run_and_check(['chmod', 'u+s', bwrap_path], context="setting setuid on bwrap")):
+            return False
+
+        # chmod can succeed without the setuid bit taking effect (a filesystem
+        # may not store it, and on a nosuid mount it is stored but ignored at
+        # exec). Sunshine would then die without a clear error (no DRM handle,
+        # no encoder), so verify explicitly and fail loudly instead.
+        if not await self._to_thread(lambda: self._verifySetuidBit(bwrap_path)):
             return False
 
         # Run Sunshine
@@ -886,6 +1019,41 @@ class SunshineController:
                 ["cp", "/usr/bin/bwrap", bwrap_path],
                 context="copying bwrap to its dedicated directory"
         )
+
+    def _verifySetuidBit(self, path: str) -> bool:
+        """
+        Verify that the setuid bit on the given file is set and effective.
+        Checks both the mode (filesystems without setuid support drop the bit
+        silently) and the nosuid mount option (the bit is stored but ignored
+        at exec). See __init__ for why the bwrap copy must be setuid root.
+        :return: True if the setuid bit is set and effective, False otherwise
+        """
+        try:
+            mode = os.stat(path).st_mode
+        except Exception as e:
+            self.logger.exception(f"An error occurred when verifying the setuid bit on {path}", exc_info=e)
+            return False
+
+        mount = self._findMountEntry(path)
+        mount_hint = f" (mount {mount[0]}, options: {mount[2]})" if mount else ""
+
+        if not mode & stat.S_ISUID:
+            self.logger.error(
+                f"The setuid bit on {path} did not persist{mount_hint} - "
+                "without it Sunshine cannot access the DRM framebuffer and will exit silently. "
+                "The target directory may need to move to a filesystem supporting setuid."
+            )
+            return False
+
+        if mount and "nosuid" in mount[2].split(","):
+            self.logger.error(
+                f"The filesystem containing {path} is mounted nosuid{mount_hint} - "
+                "the setuid bit is ignored there, Sunshine cannot access the DRM framebuffer "
+                "and will exit silently. The target directory may need to move to a mount without nosuid."
+            )
+            return False
+
+        return True
 
     def _installOrUpdateSunshine(self) -> bool:
         """
