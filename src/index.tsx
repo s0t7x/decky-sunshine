@@ -1,6 +1,7 @@
 import { useState, useEffect, VFC } from "react";
 import {
   definePlugin,
+  Field,
   PanelSection,
   PanelSectionRow,
   ButtonItem,
@@ -124,6 +125,7 @@ const Content: VFC = () => {
   })();
 
   return (
+    <>
     <PanelSection>
       <PanelSectionRow>
         <div style={{ display: "contents" }}>
@@ -148,6 +150,7 @@ const Content: VFC = () => {
             {isBusy && <Spinner style={{ width: 14, height: 14 }} />}
           </div>
           <ButtonItem
+            layout="below"
             disabled={isBusy}
             onClick={() => toggleSunshine()}
           >
@@ -162,6 +165,7 @@ const Content: VFC = () => {
           <div style={{ display: "contents" }}>
                 <span>You need to log into Sunshine</span>
                 <ButtonItem
+                  layout="below"
                   disabled={!isSunshineRunning || isBusy}
                   onClick={() =>
                     showModal(
@@ -185,10 +189,14 @@ const Content: VFC = () => {
               </div>
         </PanelSectionRow>
       }
+    </PanelSection>
 
+    <PanelSection title="Streaming">
       {/* Pairing Section */}
       <PanelSectionRow>
         <ButtonItem
+            layout="below"
+            bottomSeparator="none"
             disabled={!areCredentialsValid || !isSunshineRunning || isBusy}
             onClick={() =>
               showModal(
@@ -233,19 +241,26 @@ const Content: VFC = () => {
           }}
         />
       </PanelSectionRow>
+    </PanelSection>
 
+    <PanelSection title="Sunshine">
       {/* Update Section */}
       <PanelSectionRow>
         <div style={{ display: "contents" }}>
-          <span>Installed Sunshine version: {isRefreshingVersionInfo ? "Checking..." : sunshineCurrentVersion || "Unknown"}</span>
-          {isRefreshingVersionInfo && <Spinner style={{ width: 14, height: 14, marginLeft: 8 }} />}
-          <br />
+          <Field label="Version" focusable={false} bottomSeparator="none">
+            {isRefreshingVersionInfo
+              ? <Spinner style={{ width: 14, height: 14 }} />
+              : sunshineCurrentVersion || "Unknown"}
+          </Field>
           {sunshineUpdateVersion
             ? <div style={{ display: "contents" }}>
-                <span style={{ color: "orange" }}>
-                  Available Sunshine version: {sunshineUpdateVersion} {(sunshineCurrentVersion === sunshineUpdateVersion && "(Rebuild)")}
-                </span>
+                <Field label="Update available" focusable={false} bottomSeparator="none">
+                  <span style={{ color: "orange" }}>
+                    {sunshineUpdateVersion} {(sunshineCurrentVersion === sunshineUpdateVersion && "(Rebuild)")}
+                  </span>
+                </Field>
                 <ButtonItem
+                  layout="below"
                   disabled={isStartingOrStopping || isUpdating}
                   onClick={async () => {
                     setIsUpdating(true);
@@ -266,16 +281,17 @@ const Content: VFC = () => {
               </div>
            : <div style={{ display: "contents" }}>
                 {updateCheckTriggeredManually && !isRefreshingVersionInfo && (
-                  <span>No update available</span>
+                  <Field focusable={false} bottomSeparator="none">Up to date</Field>
                 )}
                 <ButtonItem
+                  layout="below"
                   disabled={isRefreshingVersionInfo}
                   onClick={async () => {
                     setUpdateCheckTriggeredManually(true);
                     await refreshVersionInfo(true);
                   }}
                 >
-                  Check for Sunshine update
+                  Check for updates
                 </ButtonItem>
               </div>
           }
@@ -285,19 +301,10 @@ const Content: VFC = () => {
       {/* Credentials Section */}
       <PanelSectionRow>
         <div style={{ display: "contents" }}>
-            {isGettingCredentials
-              ? <><span>Getting credentials...</span> <Spinner style={{ width: 14, height: 14, marginRight: 8 }} /></>
-              : getCredentialsReturnedValue === false
-                  ? <span style={{ color: 'red' }}>No credentials stored</span>
-                  : credentials &&
-                  <>
-                    <span>Username: {credentials.username}</span>
-                    <br />
-                    <span>Password: {credentials.password}</span>
-                  </>
-            }
             {credentials == null
               ? <ButtonItem
+                  layout="below"
+                  bottomSeparator="none"
                   disabled={isInitializing || isGettingCredentials}
                   onClick={async () => {
                     setIsGettingCredentials(true);
@@ -314,6 +321,8 @@ const Content: VFC = () => {
                   Show credentials
                 </ButtonItem>
               : <ButtonItem
+                  layout="below"
+                  bottomSeparator="none"
                   onClick={() => {
                     setCredentials(null);
                     setGetCredentialsReturnedValue(null);
@@ -322,9 +331,24 @@ const Content: VFC = () => {
                   Hide credentials
                 </ButtonItem>
             }
+            {isGettingCredentials
+              ? <Field label="Credentials" focusable={false} bottomSeparator="none">
+                  <Spinner style={{ width: 14, height: 14 }} />
+                </Field>
+              : getCredentialsReturnedValue === false
+                  ? <Field label="Credentials" focusable={false} bottomSeparator="none">
+                      <span style={{ color: 'red' }}>None stored</span>
+                    </Field>
+                  : credentials &&
+                  <>
+                    <Field label="Username" focusable={false} bottomSeparator="none">{credentials.username}</Field>
+                    <Field label="Password" focusable={false} bottomSeparator="none">{credentials.password}</Field>
+                  </>
+            }
           </div>
       </PanelSectionRow>
     </PanelSection>
+    </>
   );
 };
 
