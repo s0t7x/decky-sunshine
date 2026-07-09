@@ -64,6 +64,16 @@ class SunshineController:
         assert logger is not None
         self.logger = logger
 
+        # Whether to force gamescope composition (vs direct scanout) while
+        # streaming. Applied at the end of start_async and cleared in stop_async,
+        # so every start/stop path is covered regardless of caller. See
+        # setCompositionForce() for the why.
+        self.force_composition = False
+
+        # Watcher task re-asserting the composition override after boot,
+        # see _applyCompositionForce()
+        self._composition_watch_task = None
+
         sslContext = ssl.create_default_context()
         sslContext.check_hostname = False
         sslContext.verify_mode = ssl.CERT_NONE
@@ -192,6 +202,11 @@ class SunshineController:
         :return: True if Sunshine was started successfully or is already running, False otherwise
         """
         if await self.isSunshineRunning_async():
+            # Already running (e.g. it survived a plugin_loader restart via setsid):
+            # still (re)apply the composition override so the atom matches the setting.
+            if self.force_composition:
+                self.logger.info("Forcing gamescope composition for streaming")
+                await self._applyCompositionForce()
             return True
 
         retry_count = 60
@@ -263,6 +278,10 @@ class SunshineController:
             self.logger.info(f"Sunshine process not found yet. Checking again in {wait_time} {'second' if wait_time == 1 else 'seconds'}")
             await asyncio.sleep(wait_time)
 
+        if self.force_composition:
+            self.logger.info("Forcing gamescope composition for streaming")
+            await self._applyCompositionForce()
+
         return True
 
     async def stop_async(self) -> bool:
@@ -270,6 +289,25 @@ class SunshineController:
         Stop the Sunshine process.
         :return: True if Sunshine was stopped successfully or wasn't running, False otherwise
         """
+        # Stop the watcher before releasing the override, so it cannot
+        # re-assert the old value concurrently to the release below.
+        if self._composition_watch_task is not None:
+            self._composition_watch_task.cancel()
+            try:
+                await self._composition_watch_task
+            except asyncio.CancelledError:
+                pass
+            self._composition_watch_task = None
+
+        # Release the gamescope composition override when stopping, so the
+        # direct-scanout power optimization is restored once we're not streaming.
+        # Only when the override is active: otherwise every stop would spawn a
+        # su/xprop subprocess (and log an error on systems where that fails)
+        # even though the feature was never enabled. Disabling the toggle while
+        # Sunshine is running is already handled live in setForceComposition.
+        if self.force_composition:
+            await self.setCompositionForce_async(False)
+
         if not await self.isSunshineRunning_async():
             return True
 
@@ -287,6 +325,117 @@ class SunshineController:
             await asyncio.sleep(wait_time)
 
         return True
+
+    def setCompositionForce(self, enabled: bool) -> bool:
+        """
+        Force gamescope to always composite instead of using its direct-scanout
+        (single-plane) optimization, by setting the GAMESCOPE_COMPOSITE_FORCE
+        root-window atom on its XWayland display.
+
+        Why this exists: in Game Mode (embedded gamescope) the `--force-composition`
+        flag and gamescopectl convars are ignored — root-window atoms override them.
+        When gamescope drops to direct scanout of a smaller buffer (e.g. when the
+        mouse cursor auto-hides), Sunshine's KMS capture streams that stretched and
+        mis-scaled — most visibly when docked, where the image is squeezed into part
+        of the external screen with the right side stretched across the rest.
+        Forcing composition keeps the captured geometry consistent.
+
+        It is applied on stream start and cleared on stop, so gamescope's
+        power-saving direct scanout is only disabled while actually streaming.
+
+        Sunshine runs as root, so the atom must be set as the session user
+        on DISPLAY :0.
+        """
+        value = "1" if enabled else "0"
+        username = self._getSessionUsername()
+        if not username:
+            self.logger.warning(f"No session user found for setting GAMESCOPE_COMPOSITE_FORCE={value}")
+            return False
+        cmd = [
+            "su", username, "-c",
+            "DISPLAY=:0 xprop -root -f GAMESCOPE_COMPOSITE_FORCE 32c "
+            "-set GAMESCOPE_COMPOSITE_FORCE " + value,
+        ]
+        return self._run_and_check(
+            cmd, context=f"setting GAMESCOPE_COMPOSITE_FORCE={value}"
+        )
+
+    def _getSessionUsername(self) -> str | None:
+        """
+        Determine the user owning the gamescope session. On the Steam Deck this
+        is 'deck', but as in the audio socket discovery it must not be
+        hardcoded: other systems may use a different user, so fall back to the
+        owner of the first regular user's runtime directory.
+        :return: The username, or None if no regular user was found
+        """
+        try:
+            return pwd.getpwnam("deck").pw_name
+        except KeyError:
+            pass
+
+        # Sort numerically by UID for a reproducible search order, as in
+        # _expandSocketPattern
+        uid_matches = (re.match(r"^/run/user/(\d+)$", path) for path in glob.glob("/run/user/*"))
+        uids = sorted(int(match.group(1)) for match in uid_matches if match)
+        for uid in uids:
+            if uid < 1000:
+                continue
+            try:
+                return pwd.getpwuid(uid).pw_name
+            except KeyError:
+                continue
+        return None
+
+    async def setCompositionForce_async(self, enabled: bool) -> bool:
+        """
+        Async variant of setCompositionForce that doesn't block the event loop.
+        """
+        return await self._to_thread(lambda: self.setCompositionForce(enabled))
+
+    async def _applyCompositionForce(self) -> None:
+        """
+        Apply the composition override and watch it for a bounded window.
+        On a cold boot the plugin can win the race against gamescope's own
+        session initialization, which (re)creates the GAMESCOPE_COMPOSITE_FORCE
+        atom with value 0 and thereby undoes an earlier write. A single write
+        is therefore not trustworthy shortly after boot; re-check the atom for
+        a while and re-assert it if it was reset.
+        """
+        await self.setCompositionForce_async(True)
+        if self._composition_watch_task is None or self._composition_watch_task.done():
+            loop = asyncio.get_event_loop()
+            self._composition_watch_task = loop.create_task(self._watchCompositionForce())
+
+    async def _watchCompositionForce(self) -> None:
+        # 12 checks every 10 seconds: covers the window between the plugin
+        # applying the override early in the boot process and the gamescope
+        # session finishing its initialization.
+        for _ in range(12):
+            await asyncio.sleep(10)
+            if not self.force_composition or not await self.isSunshineRunning_async():
+                return
+            value = await self._to_thread(self._getCompositionForce)
+            if value is not None and value != 1:
+                self.logger.info("GAMESCOPE_COMPOSITE_FORCE was reset (likely by gamescope session initialization) - re-asserting")
+                await self.setCompositionForce_async(True)
+
+    def _getCompositionForce(self) -> int | None:
+        """
+        Read the current value of the GAMESCOPE_COMPOSITE_FORCE atom.
+        :return: The value, 0 if the atom does not exist, or None if it could not be read
+        """
+        username = self._getSessionUsername()
+        if not username:
+            return None
+        result = self._run_and_capture_stdout(
+            ["su", username, "-c", "DISPLAY=:0 xprop -root GAMESCOPE_COMPOSITE_FORCE"],
+            context="reading GAMESCOPE_COMPOSITE_FORCE"
+        )
+        if result is None:
+            return None
+        value_match = re.search(r"=\s*(\d+)", result)
+        # A missing atom means gamescope (re)started without the override
+        return int(value_match.group(1)) if value_match else 0
 
     async def pair_async(self, pin, client_name) -> bool:
         """

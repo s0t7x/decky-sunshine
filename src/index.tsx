@@ -4,6 +4,7 @@ import {
   PanelSection,
   PanelSectionRow,
   ButtonItem,
+  ToggleField,
   Spinner,
   showModal,
 } from "decky-frontend-lib";
@@ -12,6 +13,7 @@ import backend from "./util/backend";
 
 import { PairingModal } from "./components/PairingModal";
 import { CredentialsModal } from "./components/CredentialsModal";
+import { LabelWithInfo } from "./components/LabelWithInfo";
 import { LOG_TAG } from "./util/constants";
 
 const Content: VFC = () => {
@@ -31,6 +33,8 @@ const Content: VFC = () => {
   const [credentials, setCredentials] = useState<{username: string, password: string} | null>(null);
   const [isGettingCredentials, setIsGettingCredentials] = useState<boolean>(false);
   const [getCredentialsReturnedValue, setGetCredentialsReturnedValue] = useState<boolean | null>(null);
+  const [forceComposition, setForceComposition] = useState<boolean>(false);
+  const [showCompositionHelp, setShowCompositionHelp] = useState<boolean>(false);
 
   const updateSunshineState = async () => {
     const isSunshineRunning = await backend.isSunshineRunning();
@@ -50,6 +54,10 @@ const Content: VFC = () => {
 
   useEffect(() => {
     refreshVersionInfo(false);
+  }, []);
+
+  useEffect(() => {
+    backend.getForceComposition().then(setForceComposition);
   }, []);
 
   useEffect(() => {
@@ -209,6 +217,21 @@ const Content: VFC = () => {
           >
             Pair Client
           </ButtonItem>
+      </PanelSectionRow>
+
+      {/* Streaming fix: force gamescope composition (docked stretched capture) */}
+      <PanelSectionRow>
+        <ToggleField
+          label={<LabelWithInfo title="Fix image when docked" onToggleHelp={() => setShowCompositionHelp(value => !value)} />}
+          description={showCompositionHelp
+            ? "Fixes the stream being squeezed into part of the screen while docked. May slightly increase GPU load while Sunshine is running."
+            : undefined}
+          checked={forceComposition}
+          onChange={(value: boolean) => {
+            setForceComposition(value);
+            backend.setForceComposition(value);
+          }}
+        />
       </PanelSectionRow>
 
       {/* Update Section */}
