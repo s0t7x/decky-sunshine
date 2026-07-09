@@ -15,7 +15,6 @@
     "@rollup/plugin-replace": "^4.0.0",
     "@rollup/plugin-typescript": "^8.3.3",
     "@types/react": "16.14.0",
-    "@types/webpack": "^5.28.0",
     "rollup": "^2.80.0",
     "rollup-plugin-import-assets": "^1.1.1",
     "shx": "^0.3.4",
