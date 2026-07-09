@@ -139,6 +139,8 @@ class Plugin:
             decky.logger.info(f"Read settings")
             self._log_settings(self)
 
+        await self.sunshineController.logEnvironment_async()
+
         if not await self.sunshineController.ensureDependencies_async():
             decky.logger.error("Couldn't ensure dependencies")
             return
