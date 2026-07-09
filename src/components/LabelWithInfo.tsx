@@ -1,5 +1,5 @@
-import { VFC, useState, useRef } from 'react'
-import { Focusable } from "decky-frontend-lib";
+import { FC, useState, useRef } from 'react'
+import { Focusable } from "@decky/ui";
 import { FaInfoCircle } from "react-icons/fa";
 
 /**
@@ -10,7 +10,7 @@ import { FaInfoCircle } from "react-icons/fa";
  * A bare Focusable doesn't get Steam's default focus ring, so we track focus
  * ourselves and visibly highlight the button when it's selected.
  */
-export const LabelWithInfo: VFC<{
+export const LabelWithInfo: FC<{
     title: string;
     onToggleHelp: () => void;
 }> = ({ title, onToggleHelp }) => {

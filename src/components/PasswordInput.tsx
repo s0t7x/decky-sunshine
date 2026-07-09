@@ -1,5 +1,5 @@
-import React from "react";
-import { TextField } from "decky-frontend-lib";
+import React, { FC } from "react";
+import { TextField } from "@decky/ui";
 
 interface PasswordInputProps {
   style?: React.CSSProperties;
@@ -8,7 +8,7 @@ interface PasswordInputProps {
   onChange?: (e: string) => void;
 }
 
-export const PasswordInput = (props: PasswordInputProps): JSX.Element => {
+export const PasswordInput: FC<PasswordInputProps> = (props) => {
   const { style, label, value, onChange } = props;
 
   // Mask the input via CSS instead of type="password": Valve's TextField

@@ -1,10 +1,10 @@
-import { VFC } from 'react'
-import { DialogButton, TextField, ModalRoot, Field, DialogButtonPrimary } from "decky-frontend-lib";
+import { FC } from 'react'
+import { DialogButton, TextField, ModalRoot, Field, DialogButtonPrimary } from "@decky/ui";
 import { playSound } from "../util/util";
 import { useState } from "react";
 import { PasswordInput } from './PasswordInput';
 
-export const CredentialsModal: VFC<{
+export const CredentialsModal: FC<{
     closeModal?: () => void;
     onLogin: (username: string, password: string) => Promise<boolean | null>;
 }> = ({

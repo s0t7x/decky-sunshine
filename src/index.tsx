@@ -1,6 +1,5 @@
-import { useState, useEffect, VFC } from "react";
+import { useState, useEffect, FC } from "react";
 import {
-  definePlugin,
   Field,
   PanelSection,
   PanelSectionRow,
@@ -8,7 +7,9 @@ import {
   ToggleField,
   Spinner,
   showModal,
-} from "decky-frontend-lib";
+  staticClasses,
+} from "@decky/ui";
+import { definePlugin } from "@decky/api";
 import { FaSun } from "react-icons/fa";
 import backend from "./util/backend";
 
@@ -17,7 +18,7 @@ import { CredentialsModal } from "./components/CredentialsModal";
 import { LabelWithInfo } from "./components/LabelWithInfo";
 import { LOG_TAG } from "./util/constants";
 
-const Content: VFC = () => {
+const Content: FC = () => {
   const HEALTH_CHECK_INTERVAL = 5000;
 
   // State
@@ -352,11 +353,10 @@ const Content: VFC = () => {
   );
 };
 
-export default definePlugin((serverApi: any) => {
-  backend.serverAPI = serverApi;
-
+export default definePlugin(() => {
   return {
-    title: <div className="Title">Decky Sunshine</div>,
+    name: "Decky Sunshine",
+    titleView: <div className={staticClasses.Title}>Decky Sunshine</div>,
     content: <Content />,
     icon: <FaSun />,
   };

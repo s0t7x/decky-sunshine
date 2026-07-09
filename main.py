@@ -2,18 +2,17 @@ import decky
 
 from pathlib import Path
 import os
-import asyncio
 
 from settings import SettingsManager
 from sunshine import SunshineController
 
 class Plugin:
-    sunshineController = None
-    settingManager = None
-    _last_state = None
-    _last_is_running = None
-    _last_are_credentials_valid = None
-    _last_version_info = None
+    def __init__(self):
+        self.sunshineController = None
+        self.settingManager = None
+        self._last_is_running = None
+        self._last_are_credentials_valid = None
+        self._last_version_info = None
 
     async def set_setting(self, key, value):
         return self.settingManager.setSetting(key, value)
@@ -21,21 +20,21 @@ class Plugin:
     async def get_setting(self, key, default):
         return self.settingManager.getSetting(key, default)
 
-    async def isSunshineRunning(self):
+    async def is_sunshine_running(self):
         current_is_running = await self.sunshineController.isSunshineRunning_async()
         if self._last_is_running != current_is_running:
             decky.logger.info(f"Sunshine running state changed: {self._last_is_running if self._last_is_running is not None else 'unknown'} → {current_is_running if current_is_running is not None else 'unknown'}")
             self._last_is_running = current_is_running
         return current_is_running
 
-    async def areCredentialsValid(self):
+    async def are_credentials_valid(self):
         current_are_credentials_valid = await self.sunshineController.areCredentialsValid_async()
         if self._last_are_credentials_valid != current_are_credentials_valid:
             decky.logger.info(f"Credentials valid state changed: {self._last_are_credentials_valid if self._last_are_credentials_valid is not None else 'unknown'} → {current_are_credentials_valid if current_are_credentials_valid is not None else 'unknown'}")
             self._last_are_credentials_valid = current_are_credentials_valid
         return current_are_credentials_valid
 
-    async def startSunshine(self):
+    async def start_sunshine(self):
         decky.logger.info("Starting sunshine...")
         res = await self.sunshineController.start_async()
         if res:
@@ -46,7 +45,7 @@ class Plugin:
             self.settingManager.setSetting("lastRunState", "stop")
         return res
 
-    async def setForceComposition(self, enabled):
+    async def set_force_composition(self, enabled):
         """
         Persist the "force gamescope composition while streaming" toggle. The
         controller applies it on its next start_async and clears it on stop_async;
@@ -61,10 +60,10 @@ class Plugin:
         decky.logger.info(f"forceComposition set to {enabled}")
         return enabled
 
-    async def getForceComposition(self):
+    async def get_force_composition(self):
         return self.settingManager.getSetting("forceComposition", False)
 
-    async def stopSunshine(self):
+    async def stop_sunshine(self):
         decky.logger.info("Stopping sunshine...")
         res = await self.sunshineController.stop_async()
         if res:
@@ -84,7 +83,7 @@ class Plugin:
         decky.logger.info(f"Pairing returned {send}")
         return send
 
-    async def setCredentials(self, username, password):
+    async def set_credentials(self, username, password):
         if not username or not password:
             decky.logger.info("Invalid username or password provided for setting credentials")
             return None
@@ -92,9 +91,9 @@ class Plugin:
         authHeader = self.sunshineController.setCredentials(username, password)
         self.settingManager.setSetting("lastAuthHeader", authHeader)
         decky.logger.info("Credentials set")
-        return await self.areCredentialsValid(self)
+        return await self.are_credentials_valid()
 
-    async def getCredentials(self):
+    async def get_credentials(self):
         decky.logger.info("Getting credentials...")
         credentials = self.sunshineController.getCredentials()
         if not credentials:
@@ -103,7 +102,7 @@ class Plugin:
         decky.logger.info(f"Credentials found")
         return credentials
 
-    async def getSunshineVersionInfo(self, refresh_appstream = True):
+    async def get_sunshine_version_info(self, refresh_appstream = True):
         versionInfo = await self.sunshineController.getSunshineVersionInfo_async(refresh_appstream)
         if versionInfo:
             last_current_version = self._last_version_info["current_version"] or 'unknown' if self._last_version_info else 'unknown'
@@ -118,7 +117,7 @@ class Plugin:
             self._last_version_info = versionInfo
         return versionInfo
 
-    async def updateSunshine(self):
+    async def update_sunshine(self):
         decky.logger.info("Updating Sunshine...")
         res = await self.sunshineController.updateSunshine_async()
         if res:
@@ -137,7 +136,7 @@ class Plugin:
             self.settingManager = SettingsManager(name = "decky-sunshine", settings_directory=os.environ["DECKY_PLUGIN_SETTINGS_DIR"])
             self.settingManager.read()
             decky.logger.info(f"Read settings")
-            self._log_settings(self)
+            self._log_settings()
 
         await self.sunshineController.logEnvironment_async()
 

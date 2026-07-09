@@ -2,6 +2,7 @@
   "name": "Decky Sunshine",
   "author": "s0t7x",
   "flags": ["root"],
+  "api_version": 1,
   "publish": {
     "tags": ["root", "streaming", "moonlight", "sunshine", "server"],
     "description": "Stream your Steam Deck screen to another device with minimal effort.",
