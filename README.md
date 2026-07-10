@@ -75,9 +75,12 @@ The plugin will handle installing Sunshine automatically.
 ### I manually installed Sunshine before. Can I still use Decky Sunshine?<a id="faq-installedBefore"></a>
 This depends on how you ran Sunshine before.
 
-**If you installed Sunshine as the `deck` user** (e.g. `flatpak install dev.lizardbyte.app.Sunshine` without `sudo`): The plugin will not detect this user-scoped installation and will install Sunshine system-wide instead, initializing it with a fresh set of credentials. Use the **"Show credentials"** button in the plugin UI to retrieve the generated credentials for the Web UI.
+**If you installed Sunshine as the `deck` user** (e.g. `flatpak install dev.lizardbyte.app.Sunshine` without `sudo`): The plugin will not detect this user-scoped installation and will install Sunshine system-wide instead, initializing it with a fresh set of credentials. Use the **"Show credentials"** button in the plugin UI to retrieve the generated credentials for the [Web UI](#faq-webUi).
 
 **If you installed Sunshine system-wide or ran it as root** (e.g. using `sudo -i flatpak run`): The plugin will detect the existing installation and you should be able to log in using the credentials from your initial setup. If this does not work, you can reset the credentials for the root user by running `sudo -i flatpak run dev.lizardbyte.app.Sunshine --creds <username> <password>` (note the `sudo -i` — running without it would reset credentials for the `deck` user instead, which has no effect on the plugin's Sunshine instance). Alternatively, uninstall Sunshine and delete its configuration (this includes all paired devices!) using `sudo -i flatpak uninstall --delete-data dev.lizardbyte.app.Sunshine`, then let Decky Sunshine reinstall it.
+
+### How do I open Sunshine’s Web UI?<a id="faq-webUi"></a>
+Sunshine’s Web UI is available at `https://<your-deck-ip>:47990` — or `https://localhost:47990` in a browser on the Deck itself. Note the `https://`: browsers default to `http://` and Sunshine does not redirect, so without it the page appears unreachable. Your browser will warn about a self-signed certificate; that is expected, proceed anyway. Log in with the credentials shown by the plugin’s `Show credentials` button.
 
 ### Will you add feature X?
 The goal of this plugin is to simplify setting up Sunshine in Game Mode and pairing Moonlight clients.
@@ -85,7 +88,8 @@ If your idea supports that, feel free to open an issue. Features outside this go
 
 ### I want to change a setting in Sunshine. Will you add a feature for that?
 If the setting improves the experience for many users, open an issue to discuss.
-Otherwise, just adjust it in **Sunshine’s Web UI** using the credentials displayed after clicking the `Show credentials` button.
+Otherwise, just adjust it in [**Sunshine’s Web UI**](#faq-webUi) using the credentials displayed after clicking the `Show credentials` button.
+If you prefer editing the configuration file directly: it is located at `/root/.var/app/dev.lizardbyte.app.Sunshine/config/sunshine/sunshine.conf` — in the **root** user’s home, since the plugin runs Sunshine as root, not under `/home/deck`. Restart Sunshine afterwards for changes to take effect.
 
 ### How can I see the Steam overlays on my device while playing?
 You can stream the Steam overlays (three-dots / "STEAM" button menus) by enabling a developer setting. This may cause visual or performance issues; revert if you notice problems.
@@ -101,7 +105,7 @@ To undo this, disable Force Composite.
 
 ### The plugin asks for credentials.
 If you manually installed Sunshine before, see [the related FAQ entry](#faq-installedBefore).
-If you changed your Sunshine credentials e.g. from Sunshine's Web UI, enter these credentials.
+If you changed your Sunshine credentials e.g. from [Sunshine's Web UI](#faq-webUi), enter these credentials.
 
 ### I want to install a nightly version. How can I do that?
 To install a nightly (or specific) version:
