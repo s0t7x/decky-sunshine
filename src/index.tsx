@@ -233,7 +233,7 @@ const Content: FC = () => {
         <ToggleField
           label={<LabelWithInfo title="Fix image when docked" onToggleHelp={() => setShowCompositionHelp(value => !value)} />}
           description={showCompositionHelp
-            ? "Fixes the stream being squeezed into part of the screen while docked. May slightly increase GPU load while Sunshine is running."
+            ? "Fixes the stream being squeezed into part of the screen while docked. Only takes effect while an external display is connected; may slightly increase GPU load then."
             : undefined}
           checked={forceComposition}
           onChange={(value: boolean) => {
