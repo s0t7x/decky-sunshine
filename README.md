@@ -82,6 +82,8 @@ This depends on how you ran Sunshine before.
 ### How do I open Sunshine’s Web UI?<a id="faq-webUi"></a>
 Sunshine’s Web UI is available at `https://<your-deck-ip>:47990` — or `https://localhost:47990` in a browser on the Deck itself. Note the `https://`: browsers default to `http://` and Sunshine does not redirect, so without it the page appears unreachable. Your browser will warn about a self-signed certificate; that is expected, proceed anyway. Log in with the credentials shown by the plugin’s `Show credentials` button.
 
+Changing settings (not just viewing) from another device requires Sunshine’s CSRF protection to allow that address — the plugin takes care of this automatically when it starts Sunshine. If saving settings fails with a CSRF error (e.g. right after the Deck’s IP address changed), stop and start Sunshine once from the plugin.
+
 ### Will you add feature X?
 The goal of this plugin is to simplify setting up Sunshine in Game Mode and pairing Moonlight clients.
 If your idea supports that, feel free to open an issue. Features outside this goal will probably not be implemented, since they take development time and ongoing maintenance.

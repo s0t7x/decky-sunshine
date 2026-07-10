@@ -51,6 +51,9 @@ class RequestResult:
 
 class SunshineController:
     SunshineFlatpakAppId = "dev.lizardbyte.app.Sunshine"
+    # Sunshine runs as root, so its config lives in the root user's home
+    SunshineConfigPath = "/root/.var/app/dev.lizardbyte.app.Sunshine/config/sunshine/sunshine.conf"
+    WebUiPort = 47990
     logger = None
 
     authHeader = ""
@@ -336,6 +339,135 @@ class SunshineController:
                 return False
             self.logger.info("Sunshine was installed successfully.")
             return await self._initSunshine()
+
+    def getLanIp(self) -> str | None:
+        """
+        Best-effort LAN IP of this device, for showing the user a Web UI URL
+        that other devices on the network can reach. Connecting a UDP socket
+        sends no packets; it only makes the kernel pick the source address for
+        the default route (the target is TEST-NET-1, never actually routable).
+        :return: The LAN IP, or None when there is no route (e.g. no network)
+        """
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.connect(("192.0.2.1", 80))
+                return s.getsockname()[0]
+        except OSError as e:
+            self.logger.warning(f"Could not determine the LAN IP: {e}")
+            return None
+
+    def lanWebUiOrigin(self) -> str | None:
+        """
+        The origin under which other devices on the network reach the Web UI,
+        or None when the LAN IP cannot be determined.
+        """
+        ip = self.getLanIp()
+        return f"https://{ip}:{self.WebUiPort}" if ip else None
+
+    @staticmethod
+    def _originMatchesAny(origin: str, allowed: list[str]) -> bool:
+        """
+        Whether origin is covered by one of the allowed entries, mirroring
+        Sunshine's own check: exact prefix followed by ':' (port), '/' (path)
+        or the end of the origin - so a port-less entry like
+        https://192.0.2.5 also covers https://192.0.2.5:47990.
+        """
+        for entry in allowed:
+            if origin == entry:
+                return True
+            if origin.startswith(entry) and origin[len(entry)] in ":/":
+                return True
+        return False
+
+    def _readCsrfAllowedOrigins(self) -> tuple[list[str], int | None, list[str]]:
+        """
+        Read sunshine.conf and extract the csrf_allowed_origins option.
+        :return: (all file lines, index of the option's line or None, origins)
+        """
+        lines = []
+        if os.path.exists(self.SunshineConfigPath):
+            with open(self.SunshineConfigPath) as f:
+                lines = f.read().splitlines()
+        for i, line in enumerate(lines):
+            key, separator, value = line.partition("=")
+            if separator and key.strip() == "csrf_allowed_origins":
+                return lines, i, [o.strip() for o in value.split(",") if o.strip()]
+        return lines, None, []
+
+    async def isCsrfOriginAllowed_async(self, origin: str) -> bool:
+        """
+        See isCsrfOriginAllowed.
+        """
+        return await self._to_thread(lambda: self.isCsrfOriginAllowed(origin))
+
+    def isCsrfOriginAllowed(self, origin: str) -> bool:
+        """
+        Whether sunshine.conf currently allows origin for CSRF-protected
+        requests. This is the file's state: a running Sunshine instance only
+        enforces what the file said when the instance started.
+        :return: True if allowed, False if not or the config is unreadable
+        """
+        try:
+            _, _, origins = self._readCsrfAllowedOrigins()
+            return self._originMatchesAny(origin, origins)
+        except OSError as e:
+            self.logger.exception("Could not read csrf_allowed_origins from sunshine.conf", exc_info=e)
+            return False
+
+    async def ensureCsrfAllowedOrigin_async(self, previously_managed: str) -> tuple[str, bool]:
+        """
+        See ensureCsrfAllowedOrigin.
+        """
+        return await self._to_thread(lambda: self.ensureCsrfAllowedOrigin(previously_managed))
+
+    def ensureCsrfAllowedOrigin(self, previously_managed: str) -> tuple[str, bool]:
+        """
+        Make sure csrf_allowed_origins in sunshine.conf covers this device's
+        current LAN origin, so browsers on other devices may use the Web UI's
+        state-changing endpoints (by default Sunshine only allows localhost
+        origins, turning the Web UI read-only from anywhere else). The entry a
+        previous run added (previously_managed) is replaced instead of
+        accumulating stale IPs, while entries the user added are left alone -
+        including a user entry that already covers the origin, in which case
+        nothing is added. Sunshine reads its config at startup, so call this
+        before starting it.
+        :param previously_managed: The origin a previous run added, or ""
+        :return: (managed, added_now): the entry the plugin now owns in the
+                 file ("" if a user entry covers the origin; persist it for
+                 the next run) and whether the origin's allowance was missing
+                 and added just now - meaning an already running instance has
+                 not loaded it. On an unknown IP or errors the file is
+                 unchanged and (previously_managed, False) is returned.
+        """
+        origin = self.lanWebUiOrigin()
+        if not origin:
+            return previously_managed, False
+        try:
+            os.makedirs(os.path.dirname(self.SunshineConfigPath), exist_ok=True)
+            lines, key_index, origins = self._readCsrfAllowedOrigins()
+
+            changed = False
+            if previously_managed and previously_managed != origin and previously_managed in origins:
+                origins.remove(previously_managed)
+                changed = True
+            added_now = not self._originMatchesAny(origin, origins)
+            if added_now:
+                origins.append(origin)
+                changed = True
+
+            if changed:
+                new_line = f"csrf_allowed_origins = {','.join(origins)}"
+                if key_index is None:
+                    lines.append(new_line)
+                else:
+                    lines[key_index] = new_line
+                with open(self.SunshineConfigPath, "w") as f:
+                    f.write("\n".join(lines) + "\n")
+                self.logger.info(f"Allowed the Web UI origin {origin} for CSRF-protected requests in sunshine.conf")
+            return (origin if origin in origins else ""), added_now
+        except OSError as e:
+            self.logger.exception("Could not update csrf_allowed_origins in sunshine.conf", exc_info=e)
+            return previously_managed, False
 
     async def start_async(self) -> bool:
         """

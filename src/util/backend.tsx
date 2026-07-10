@@ -1,5 +1,5 @@
 import { call } from "@decky/api";
-import type { SunshineVersionInfo } from './types';
+import type { SunshineVersionInfo, WebUiInfo } from './types';
 import { LOG_TAG } from "./constants";
 
 class Backend {
@@ -55,6 +55,11 @@ class Backend {
     public updateSunshine = async (): Promise<boolean> => {
         const result = await this.call<[], boolean>("update_sunshine");
         return result === true;
+    }
+
+    public getWebUiInfo = async (): Promise<WebUiInfo | null> => {
+        const result = await this.call<[], WebUiInfo>("get_web_ui_info");
+        return result;
     }
 
     public getForceComposition = async (): Promise<boolean> => {
