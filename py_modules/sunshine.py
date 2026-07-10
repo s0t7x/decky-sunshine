@@ -68,13 +68,26 @@ class SunshineController:
 
         # Whether to force gamescope composition (vs direct scanout) while
         # streaming. Applied at the end of start_async and cleared in stop_async,
-        # so every start/stop path is covered regardless of caller. See
-        # setCompositionForce() for the why.
+        # so every start/stop path is covered regardless of caller. Only takes
+        # effect while an external display is connected: the capture glitch it
+        # fixes only manifests there, and undocked it would just cost battery
+        # (an extra fullscreen composite pass per frame instead of direct
+        # scanout). See setCompositionForce() for the why.
         self.force_composition = False
 
-        # Watcher task re-asserting the composition override after boot,
-        # see _applyCompositionForce()
+        # Watcher task following dock changes and re-asserting the composition
+        # override after boot, see _applyCompositionForce()
         self._composition_watch_task = None
+        # The value we last wrote to the GAMESCOPE_COMPOSITE_FORCE atom, or
+        # None if we have not written it yet (then the actual value is
+        # whatever gamescope initialized it to)
+        self._composition_applied = None
+        # Remaining atom verification reads after a write, see
+        # _reconcileCompositionForce()
+        self._composition_verify_remaining = 0
+        # Whether the display-detection failure has already been logged, so a
+        # persistent failure does not spam the log from the watcher loop
+        self._display_check_warned = False
 
         sslContext = ssl.create_default_context()
         sslContext.check_hostname = False
@@ -209,6 +222,8 @@ class SunshineController:
                 f"PULSE_SERVER: {self.environment_variables.get('PULSE_SERVER')}"
             )
 
+            self.logger.info(f"Environment: External display: {'connected' if self._isExternalDisplayConnected() else 'not connected'}")
+
             # Tools invoked via subprocess; without the required ones Sunshine
             # cannot be installed or started at all
             required_tools = ["flatpak", "cp", "chown", "chmod", "drm_info"]
@@ -331,7 +346,6 @@ class SunshineController:
             # Already running (e.g. it survived a plugin_loader restart via setsid):
             # still (re)apply the composition override so the atom matches the setting.
             if self.force_composition:
-                self.logger.info("Forcing gamescope composition for streaming")
                 await self._applyCompositionForce()
             return True
 
@@ -412,7 +426,6 @@ class SunshineController:
             await asyncio.sleep(wait_time)
 
         if self.force_composition:
-            self.logger.info("Forcing gamescope composition for streaming")
             await self._applyCompositionForce()
 
         return True
@@ -424,22 +437,18 @@ class SunshineController:
         """
         # Stop the watcher before releasing the override, so it cannot
         # re-assert the old value concurrently to the release below.
-        if self._composition_watch_task is not None:
-            self._composition_watch_task.cancel()
-            try:
-                await self._composition_watch_task
-            except asyncio.CancelledError:
-                pass
-            self._composition_watch_task = None
+        await self._cancelCompositionWatch()
 
         # Release the gamescope composition override when stopping, so the
         # direct-scanout power optimization is restored once we're not streaming.
-        # Only when the override is active: otherwise every stop would spawn a
-        # su/xprop subprocess (and log an error on systems where that fails)
-        # even though the feature was never enabled. Disabling the toggle while
-        # Sunshine is running is already handled live in setForceComposition.
-        if self.force_composition:
-            await self.setCompositionForce_async(False)
+        # Only when the override was (or may have been) applied: otherwise every
+        # stop would spawn a su/xprop subprocess (and log an error on systems
+        # where that fails) even though the override never took effect.
+        # Disabling the toggle while Sunshine is running is already handled
+        # live via applyCompositionPreference_async.
+        if self.force_composition and self._composition_applied is not False:
+            if await self.setCompositionForce_async(False):
+                self._composition_applied = False
 
         if not await self.isSunshineRunning_async():
             return True
@@ -525,32 +534,121 @@ class SunshineController:
         """
         return await self._to_thread(lambda: self.setCompositionForce(enabled))
 
+    async def applyCompositionPreference_async(self) -> None:
+        """
+        Bring the composition override in line with the force_composition flag
+        while Sunshine is running: apply per dock state and start the watcher
+        when enabled, stop the watcher and release the override when disabled.
+        """
+        if self.force_composition:
+            await self._applyCompositionForce()
+        else:
+            await self._cancelCompositionWatch()
+            if self._composition_applied is not False:
+                if await self.setCompositionForce_async(False):
+                    self._composition_applied = False
+
     async def _applyCompositionForce(self) -> None:
         """
-        Apply the composition override and watch it for a bounded window.
-        On a cold boot the plugin can win the race against gamescope's own
-        session initialization, which (re)creates the GAMESCOPE_COMPOSITE_FORCE
-        atom with value 0 and thereby undoes an earlier write. A single write
-        is therefore not trustworthy shortly after boot; re-check the atom for
-        a while and re-assert it if it was reset.
+        Apply the composition override according to the current dock state and
+        start the watcher that keeps it that way (see _watchCompositionForce).
         """
-        await self.setCompositionForce_async(True)
+        await self._reconcileCompositionForce()
         if self._composition_watch_task is None or self._composition_watch_task.done():
             loop = asyncio.get_event_loop()
             self._composition_watch_task = loop.create_task(self._watchCompositionForce())
 
     async def _watchCompositionForce(self) -> None:
-        # 12 checks every 10 seconds: covers the window between the plugin
-        # applying the override early in the boot process and the gamescope
-        # session finishing its initialization.
-        for _ in range(12):
-            await asyncio.sleep(10)
-            if not self.force_composition or not await self.isSunshineRunning_async():
+        """
+        Follow dock changes and keep the override asserted while it is wanted.
+        The dock state is a cheap sysfs read every tick; the atom itself (an
+        xprop subprocess) is only re-read for a bounded window after each
+        write, because on a cold boot gamescope's own session initialization
+        can (re)create the atom with value 0 shortly after our write - a
+        single write is not trustworthy there. Sunshine's liveness is polled
+        on a coarser grid (a flatpak subprocess); if it died externally the
+        override is released here, since no stop_async will run.
+        """
+        tick = 0
+        while True:
+            await asyncio.sleep(5)
+            tick += 1
+            if not self.force_composition:
                 return
+            if tick % 6 == 0 and not await self.isSunshineRunning_async():
+                if self._composition_applied:
+                    self.logger.info("Sunshine is gone - releasing the composition override")
+                    if await self.setCompositionForce_async(False):
+                        self._composition_applied = False
+                return
+            await self._reconcileCompositionForce()
+
+    async def _reconcileCompositionForce(self) -> None:
+        """
+        Write the composition override the current dock state calls for, if it
+        differs from what we last wrote (an unknown last value counts as
+        differing, so the first reconcile after a start always writes). After
+        a write, re-verify the atom for a bounded window against gamescope's
+        boot-time reset, see _watchCompositionForce.
+        """
+        docked = await self._to_thread(self._isExternalDisplayConnected)
+        if docked != self._composition_applied:
+            self.logger.info(
+                f"{'Applying' if docked else 'Releasing'} the composition override "
+                f"(external display {'connected' if docked else 'not connected'})"
+            )
+            if await self.setCompositionForce_async(docked):
+                self._composition_applied = docked
+            # 24 checks every 5 seconds: covers the window between the plugin
+            # applying the override early in the boot process and the
+            # gamescope session finishing its initialization.
+            self._composition_verify_remaining = 24 if docked else 0
+        elif docked and self._composition_verify_remaining > 0:
+            self._composition_verify_remaining -= 1
             value = await self._to_thread(self._getCompositionForce)
             if value is not None and value != 1:
                 self.logger.info("GAMESCOPE_COMPOSITE_FORCE was reset (likely by gamescope session initialization) - re-asserting")
-                await self.setCompositionForce_async(True)
+                if await self.setCompositionForce_async(True):
+                    self._composition_verify_remaining = 24
+
+    async def _cancelCompositionWatch(self) -> None:
+        if self._composition_watch_task is not None:
+            self._composition_watch_task.cancel()
+            try:
+                await self._composition_watch_task
+            except asyncio.CancelledError:
+                pass
+            self._composition_watch_task = None
+
+    def _isExternalDisplayConnected(self) -> bool:
+        """
+        Check whether an external display is connected, via the DRM connector
+        status in sysfs. Internal panels (eDP on the Deck and most handhelds,
+        LVDS/DSI on some others) are excluded; everything else counts as
+        external, which also covers systems without an internal panel (HTPC) -
+        there an enabled override is then simply always applied.
+        On errors, external is assumed, so an enabled toggle falls back to the
+        pre-dock-detection behavior (always applied) instead of silently never
+        applying the fix.
+        :return: True if an external display is connected, False otherwise
+        """
+        try:
+            for status_path in glob.glob("/sys/class/drm/card*-*/status"):
+                # Connector directories are named e.g. card0-eDP-1, card1-DP-2
+                connector = os.path.basename(os.path.dirname(status_path)).split("-", 1)[1]
+                if connector.startswith(("eDP", "LVDS", "DSI", "Writeback")):
+                    continue
+                with open(status_path) as f:
+                    if f.read().strip() == "connected":
+                        self._display_check_warned = False
+                        return True
+            self._display_check_warned = False
+            return False
+        except Exception as e:
+            if not self._display_check_warned:
+                self.logger.exception("Could not determine the external display state - assuming one is connected", exc_info=e)
+                self._display_check_warned = True
+            return True
 
     def _getCompositionForce(self) -> int | None:
         """

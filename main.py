@@ -48,15 +48,17 @@ class Plugin:
     async def set_force_composition(self, enabled):
         """
         Persist the "force gamescope composition while streaming" toggle. The
-        controller applies it on its next start_async and clears it on stop_async;
-        also apply immediately if Sunshine is already running. Fixes the docked
-        capture glitch where the image is squeezed into part of the screen with
-        the right side stretched across the rest.
+        controller applies it on its next start_async and clears it on
+        stop_async; also reconcile immediately if Sunshine is already running.
+        The override only takes effect while an external display is connected
+        (the controller watches for dock changes). Fixes the docked capture
+        glitch where the image is squeezed into part of the screen with the
+        right side stretched across the rest.
         """
         self.settingManager.setSetting("forceComposition", enabled)
         self.sunshineController.force_composition = enabled
         if await self.sunshineController.isSunshineRunning_async():
-            await self.sunshineController.setCompositionForce_async(enabled)
+            await self.sunshineController.applyCompositionPreference_async()
         decky.logger.info(f"forceComposition set to {enabled}")
         return enabled
 
