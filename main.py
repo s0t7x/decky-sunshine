@@ -36,7 +36,13 @@ class Plugin:
 
     async def start_sunshine(self):
         decky.logger.info("Starting sunshine...")
+        starting = not await self.sunshineController.isSunshineRunning_async()
+        added_now = await self._ensure_csrf_allowed_origin()
         res = await self.sunshineController.start_async()
+        if starting and res:
+            self.settingManager.setSetting("csrfRestartPending", False)
+        elif added_now:
+            self.settingManager.setSetting("csrfRestartPending", True)
         if res:
             decky.logger.info("Sunshine started")
             self.settingManager.setSetting("lastRunState", "start")
@@ -104,6 +110,50 @@ class Plugin:
         decky.logger.info(f"Credentials found")
         return credentials
 
+    async def get_web_ui_info(self):
+        """
+        The LAN IP other devices reach the Web UI under (None without a
+        network route) and whether changing settings from that address works:
+        the current LAN origin must be covered by csrf_allowed_origins in
+        sunshine.conf (read live, so entries that were already there - from a
+        user or an earlier run - count), and no config change may be pending
+        that the running instance has not loaded (csrfRestartPending; Sunshine
+        reads its config only at startup). When not ready, the frontend offers
+        the one restart that fixes it.
+        """
+        ip = self.sunshineController.getLanIp()
+        editing_ready = False
+        if ip is not None:
+            origin = f"https://{ip}:{self.sunshineController.WebUiPort}"
+            editing_ready = (
+                await self.sunshineController.isCsrfOriginAllowed_async(origin)
+                and not self.settingManager.getSetting("csrfRestartPending", False)
+            )
+        return {
+            "ip": ip,
+            "editing_ready": editing_ready,
+        }
+
+    async def _ensure_csrf_allowed_origin(self):
+        """
+        Keep the Web UI usable (not just viewable) from other devices: have
+        the controller allow the current LAN origin in Sunshine's config and
+        persist which entry the plugin manages (csrfManagedOrigin), so a later
+        run can replace it after an IP change without touching user-added
+        entries. Must run before Sunshine starts; it reads the config only
+        then.
+        :return: Whether the allowance was missing and added just now. The
+                 caller must translate that into the csrfRestartPending
+                 setting: set it when Sunshine kept running (the instance has
+                 not loaded the new entry), clear it once an actual
+                 (re)start happened.
+        """
+        managed_old = self.settingManager.getSetting("csrfManagedOrigin", "")
+        managed_new, added_now = await self.sunshineController.ensureCsrfAllowedOrigin_async(managed_old)
+        if managed_new != managed_old:
+            self.settingManager.setSetting("csrfManagedOrigin", managed_new)
+        return added_now
+
     async def get_sunshine_version_info(self, refresh_appstream = True):
         versionInfo = await self.sunshineController.getSunshineVersionInfo_async(refresh_appstream)
         if versionInfo:
@@ -121,10 +171,16 @@ class Plugin:
 
     async def update_sunshine(self):
         decky.logger.info("Updating Sunshine...")
+        # The update flow restarts Sunshine, so it picks up the origin ensured
+        # here; on failure the old instance may keep running without it.
+        added_now = await self._ensure_csrf_allowed_origin()
         res = await self.sunshineController.updateSunshine_async()
         if res:
+            self.settingManager.setSetting("csrfRestartPending", False)
             decky.logger.info("Sunshine updated successfully")
         else:
+            if added_now:
+                self.settingManager.setSetting("csrfRestartPending", True)
             decky.logger.info("Couldn't update Sunshine")
         return res
 
@@ -168,7 +224,16 @@ class Plugin:
         lastRunState = self.settingManager.getSetting("lastRunState", "")
         if lastRunState in ("start", ""):
             decky.logger.info("Starting Sunshine")
-            await self.sunshineController.start_async()
+            # Sunshine may have survived a plugin_loader restart; then this is
+            # an ensure-only pass and the running instance keeps enforcing the
+            # allowances from its own start (see _ensure_csrf_allowed_origin).
+            starting = not await self.sunshineController.isSunshineRunning_async()
+            added_now = await self._ensure_csrf_allowed_origin()
+            started = await self.sunshineController.start_async()
+            if starting and started:
+                self.settingManager.setSetting("csrfRestartPending", False)
+            elif added_now:
+                self.settingManager.setSetting("csrfRestartPending", True)
 
         decky.logger.info("Decky Sunshine loaded")
 

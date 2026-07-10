@@ -15,6 +15,7 @@ import backend from "./util/backend";
 
 import { PairingModal } from "./components/PairingModal";
 import { CredentialsModal } from "./components/CredentialsModal";
+import { WebUiModal } from "./components/WebUiModal";
 import { LabelWithInfo } from "./components/LabelWithInfo";
 import { LOG_TAG } from "./util/constants";
 
@@ -297,6 +298,24 @@ const Content: FC = () => {
               </div>
           }
         </div>
+      </PanelSectionRow>
+
+    </PanelSection>
+
+    {/* Web UI: its address/QR and its credentials belong together; Steam's
+        browser hard-blocks Sunshine's self-signed certificate (net error
+        -202, no bypass), so instead of opening the Web UI on the Deck, show
+        its address and a QR code for another device. */}
+    <PanelSection title="Web UI">
+      <PanelSectionRow>
+        <ButtonItem
+          layout="below"
+          bottomSeparator="none"
+          disabled={!isSunshineRunning || isBusy}
+          onClick={() => showModal(<WebUiModal />, window)}
+        >
+          Show Web UI address
+        </ButtonItem>
       </PanelSectionRow>
 
       {/* Credentials Section */}
