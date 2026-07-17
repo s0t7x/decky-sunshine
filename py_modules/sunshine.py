@@ -1255,20 +1255,14 @@ class SunshineController:
             result = False
         return result
 
-    async def removeBwrapCopy_async(self) -> bool:
-        """
-        Async variant of removeBwrapCopy that doesn't block the event loop.
-        """
-        return await self._to_thread(self.removeBwrapCopy)
-
     def dispatchUninstallCleanup(self, log_path: str) -> bool:
         """
         Stop Sunshine and release the composition override from a detached
         helper process during plugin uninstall. Stopping in-process is not
-        reliable there: the plugin process can die at any moment after the
-        loader's stop request (the loader SIGKILLs it at the latest ~5 s
-        after SIGTERM, and on the Deck it was observed dying even earlier,
-        right after the copy removals). The SIGKILL only hits the plugin
+        reliable there: the loader SIGKILLs the plugin process at the
+        latest ~5 s after SIGTERM, and on the Deck its event loop was
+        observed to stop even earlier, mid-uninstall - anything still
+        needing the loop never ran. The SIGKILL only hits the plugin
         process itself (no process-group kill), so a helper in its own
         session survives and finishes the job. Nothing is left to observe
         it, so it logs to log_path - the plugin's log directory survives
