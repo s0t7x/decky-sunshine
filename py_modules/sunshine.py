@@ -118,6 +118,10 @@ class SunshineController:
         # /run + /tmp are mounted nosuid, so none of those work. /var/lib is
         # root-owned on a suid-capable ext4 mount, so we use a directory there.
         self.environment_variables["FLATPAK_BWRAP"] = "/var/lib/decky-sunshine/bwrap"
+        # Where plugin versions before the move to /var/lib kept the copy;
+        # removed on uninstall (see removeBwrapCopy)
+        runtime_dir = os.environ.get("DECKY_PLUGIN_RUNTIME_DIR")
+        self.legacyBwrapPath = os.path.join(runtime_dir, "bwrap") if runtime_dir else None
         self.environment_variables["LD_LIBRARY_PATH"] = "/usr/lib/:" + self.environment_variables.get("LD_LIBRARY_PATH", "")
 
     def setCredentials(self, username, password) -> str:
@@ -1222,6 +1226,77 @@ class SunshineController:
         except Exception as e:
             self.logger.exception("An error occurred when checking if bwrap was copied", exc_info=e)
         return False
+
+    def removeBwrapCopy(self) -> bool:
+        """
+        Remove the directory holding the setuid-root bwrap copy. Uninstall
+        counterpart to _copyBwrap: without it a setuid-root binary would
+        survive the plugin's removal.
+        :return: True if the copy is gone afterwards, False otherwise
+        """
+        result = True
+        bwrap_dir = os.path.dirname(self.environment_variables["FLATPAK_BWRAP"])
+        try:
+            if os.path.exists(bwrap_dir):
+                shutil.rmtree(bwrap_dir)
+                self.logger.info(f"Removed the bwrap copy directory {bwrap_dir}")
+        except Exception as e:
+            self.logger.exception(f"An error occurred when removing the bwrap copy directory {bwrap_dir}", exc_info=e)
+            result = False
+        # Plugin versions before the move to /var/lib kept the copy in the
+        # runtime dir; that stale setuid binary must not survive either. Only
+        # the file is ours - the runtime dir itself belongs to the loader.
+        try:
+            if self.legacyBwrapPath and os.path.exists(self.legacyBwrapPath):
+                os.remove(self.legacyBwrapPath)
+                self.logger.info(f"Removed the legacy bwrap copy {self.legacyBwrapPath}")
+        except Exception as e:
+            self.logger.exception(f"An error occurred when removing the legacy bwrap copy {self.legacyBwrapPath}", exc_info=e)
+            result = False
+        return result
+
+    def dispatchUninstallCleanup(self, log_path: str) -> bool:
+        """
+        Stop Sunshine and release the composition override from a detached
+        helper process during plugin uninstall. Stopping in-process is not
+        reliable there: the loader SIGKILLs the plugin process at the
+        latest ~5 s after SIGTERM, and on the Deck its event loop was
+        observed to stop even earlier, mid-uninstall - anything still
+        needing the loop never ran. The SIGKILL only hits the plugin
+        process itself (no process-group kill), so a helper in its own
+        session survives and finishes the job. Nothing is left to observe
+        it, so it logs to log_path - the plugin's log directory survives
+        the uninstall.
+        :param log_path: File the helper appends its output to
+        :return: True if the helper was dispatched, False otherwise
+        """
+        script = (
+            f'exec >> {shlex.quote(log_path)} 2>&1\n'
+            'echo "$(date) - uninstall cleanup: stopping Sunshine"\n'
+            f'flatpak kill {self.SunshineFlatpakAppId}\n'
+        )
+        username = self._getSessionUsername()
+        if username:
+            script += (
+                f'{shlex.join(["su", username, "-c"])} "DISPLAY=:0 xprop -root '
+                '-f GAMESCOPE_COMPOSITE_FORCE 32c -set GAMESCOPE_COMPOSITE_FORCE 0"\n'
+            )
+        else:
+            script += 'echo "no session user found - not touching the composition override"\n'
+        script += 'echo "$(date) - uninstall cleanup done"\n'
+        try:
+            # environment_variables (not the inherited env) is required here:
+            # the raw environment of the PyInstaller-packed loader has
+            # LD_LIBRARY_PATH pointing at its bundled libs, against which sh
+            # (= bash) fails to start ("symbol lookup error: ...
+            # rl_trim_arg_from_keyseq" against the bundled libreadline,
+            # observed on the Deck). environment_variables prepends /usr/lib/.
+            subprocess.Popen(["sh", "-c", script], env=self.environment_variables, start_new_session=True)
+        except Exception as e:
+            self.logger.exception("An error occurred when dispatching the uninstall cleanup helper", exc_info=e)
+            return False
+        self.logger.info("Dispatched the detached uninstall cleanup helper")
+        return True
 
     def _isSunshineInstalled(self) -> bool:
         result = self._run_and_capture_stdout(

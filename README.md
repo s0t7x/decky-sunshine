@@ -109,6 +109,13 @@ To undo this, disable Force Composite.
 If you manually installed Sunshine before, see [the related FAQ entry](#faq-installedBefore).
 If you changed your Sunshine credentials e.g. from [Sunshine's Web UI](#faq-webUi), enter these credentials.
 
+### How do I completely remove the plugin and Sunshine?<a id="faq-uninstall"></a>
+Uninstalling the plugin from the Decky menu stops Sunshine and cleans up everything the plugin placed outside its own folder. Following the usual convention, the Sunshine flatpak itself and its data (credentials, paired devices, configuration) are kept — a later reinstall of the plugin picks up right where you left off. If you want Sunshine gone too, run:
+```bash
+sudo -i flatpak uninstall --delete-data dev.lizardbyte.app.Sunshine
+```
+Note that `--delete-data` removes all paired devices and settings irrevocably.
+
 ### I want to install a nightly version. How can I do that?
 To install a nightly (or specific) version:
 1. Open the Decky tab and press the cog to open Decky Loader settings.

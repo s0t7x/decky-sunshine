@@ -240,6 +240,36 @@ class Plugin:
     async def _unload(self):
         decky.logger.info("Decky Sunshine unloaded")
 
+    async def _uninstall(self):
+        """
+        Called by the loader when the plugin is being uninstalled (after
+        _unload). The loader SIGKILLs the plugin process at the latest ~5 s
+        after its stop request, and on the Deck the event loop was observed
+        to stop mid-uninstall: a coroutine parked at an await was never
+        resumed. Hence the body must not contain a single await - without
+        suspension points it runs as one uninterruptible block that needs
+        nothing but a live process (blocking the loop is fine, the plugin
+        is going away) - and the work is ordered by cost: first dispatch
+        the detached helper that stops Sunshine and releases the
+        composition override (survives this process, ~2 ms), then remove
+        the setuid bwrap copies. Deliberately no in-process stop_async: it
+        never ran to completion in the field. A running Sunshine keeps its
+        already-exec'd binary, so removing the copy while the helper is
+        still stopping it is safe.
+        """
+        decky.logger.info("Uninstalling Decky Sunshine...")
+        try:
+            self.sunshineController.dispatchUninstallCleanup(
+                os.path.join(decky.DECKY_PLUGIN_LOG_DIR, "uninstall-cleanup.log")
+            )
+        except Exception as e:
+            decky.logger.error(f"Error dispatching the uninstall cleanup: {e}")
+        try:
+            self.sunshineController.removeBwrapCopy()
+        except Exception as e:
+            decky.logger.error(f"Error removing the bwrap copy during uninstall: {e}")
+        decky.logger.info("Decky Sunshine uninstall cleanup done")
+
     async def _migration(self):
         decky.migrate_settings(str(Path(decky.DECKY_HOME) / "settings" / "decky-sunshine.json"))
 
