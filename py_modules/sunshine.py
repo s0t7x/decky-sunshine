@@ -122,7 +122,41 @@ class SunshineController:
         # removed on uninstall (see removeBwrapCopy)
         runtime_dir = os.environ.get("DECKY_PLUGIN_RUNTIME_DIR")
         self.legacyBwrapPath = os.path.join(runtime_dir, "bwrap") if runtime_dir else None
-        self.environment_variables["LD_LIBRARY_PATH"] = "/usr/lib/:" + self.environment_variables.get("LD_LIBRARY_PATH", "")
+        # The loader hands us an environment pointing at its own bundled
+        # libraries; the system binaries we spawn must not see that.
+        sanitized_library_path = self._sanitizedLibraryPath(self.environment_variables)
+        if sanitized_library_path is None:
+            self.environment_variables.pop("LD_LIBRARY_PATH", None)
+        else:
+            self.environment_variables["LD_LIBRARY_PATH"] = sanitized_library_path
+
+    @staticmethod
+    def _sanitizedLibraryPath(env: dict) -> str | None:
+        """
+        The LD_LIBRARY_PATH for the system binaries this plugin spawns, with the
+        Decky loader's bundled libraries removed.
+
+        The loader is a PyInstaller one-file binary: its bootloader unpacks the
+        bundled libraries into a temporary directory (basename _MEI...) and points
+        LD_LIBRARY_PATH at it. Plugins inherit that environment, so every
+        subprocess would prefer those libraries over the system ones - which
+        breaks binaries linked against newer versions: flatpak against
+        libcrypto/libssl on Fedora-based systems (#114), sh/bash against
+        libreadline on the Deck (see removeBwrapCopy's caller). PyInstaller keeps
+        the value it replaced in LD_LIBRARY_PATH_ORIG whenever there was one; if
+        there was none, the bundled entries are dropped and what remains is kept.
+        :param env: The environment to derive the value from
+        :return: The sanitized value, or None when nothing should be set at all
+        """
+        original = env.get("LD_LIBRARY_PATH_ORIG")
+        if original is None:
+            original = ":".join(
+                entry for entry in env.get("LD_LIBRARY_PATH", "").split(":")
+                # An empty entry means "the current directory" to the dynamic
+                # linker, so those are dropped along with the bundled ones.
+                if entry and not os.path.basename(entry.rstrip("/")).startswith("_MEI")
+            )
+        return original or None
 
     def setCredentials(self, username, password) -> str:
         """
@@ -230,6 +264,10 @@ class SunshineController:
             )
 
             self.logger.info(f"Environment: External display: {'connected' if self._isExternalDisplayConnected() else 'not connected'}")
+
+            # The loader's bundled libraries must not appear here - if they do,
+            # every subprocess we spawn is at risk (see _sanitizedLibraryPath)
+            self.logger.info(f"Environment: LD_LIBRARY_PATH: {self.environment_variables.get('LD_LIBRARY_PATH', '<unset>')}")
 
             # Tools invoked via subprocess; without the required ones Sunshine
             # cannot be installed or started at all
@@ -488,11 +526,23 @@ class SunshineController:
         retry_count = 60
         wait_time = 1
 
+        # The display check shells out to drm_info, which is not part of every
+        # distribution. Without it the check can never succeed, so waiting would
+        # burn the whole retry budget and then abort - Sunshine would never start
+        # at all (#114). Skip the display gate in that case and wait for audio
+        # only; starting without the gate is what the plugin did before #67.
+        drm_info_path = shutil.which("drm_info", path=self.environment_variables.get("PATH", os.defpath))
+        if drm_info_path is None:
+            self.logger.warning(
+                "drm_info is not installed - cannot check whether a display is ready. "
+                "Starting Sunshine without that check; it may fail if no display is available yet."
+            )
+
         # If Sunshine is started too early in the boot process, it won't find a display to connect to
         # or the audio subsystem may not be ready. Thus, we check whether both are available before
         # starting Sunshine.
         while retry_count > 0:
-            display_available = await self._to_thread(self._isDisplayAvailable)
+            display_available = True if drm_info_path is None else await self._to_thread(self._isDisplayAvailable)
             audio_available = await self._to_thread(self._isAudioAvailable)
 
             if display_available and audio_available:
@@ -515,8 +565,8 @@ class SunshineController:
             await asyncio.sleep(wait_time)
 
         if display_available and audio_available:
-            self.logger.info("Display and audio subsystem available")
-        elif display_available:
+            self.logger.info("Audio subsystem available" if drm_info_path is None else "Display and audio subsystem available")
+        elif display_available and drm_info_path is not None:
             self.logger.info("Display available")
 
         bwrap_path = self.environment_variables["FLATPAK_BWRAP"]
@@ -1290,7 +1340,8 @@ class SunshineController:
             # LD_LIBRARY_PATH pointing at its bundled libs, against which sh
             # (= bash) fails to start ("symbol lookup error: ...
             # rl_trim_arg_from_keyseq" against the bundled libreadline,
-            # observed on the Deck). environment_variables prepends /usr/lib/.
+            # observed on the Deck). environment_variables is sanitized,
+            # see _sanitizedLibraryPath.
             subprocess.Popen(["sh", "-c", script], env=self.environment_variables, start_new_session=True)
         except Exception as e:
             self.logger.exception("An error occurred when dispatching the uninstall cleanup helper", exc_info=e)
