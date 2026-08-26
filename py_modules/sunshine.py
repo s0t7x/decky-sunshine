@@ -51,6 +51,7 @@ class RequestResult:
 
 class SunshineController:
     SunshineFlatpakAppId = "dev.lizardbyte.app.Sunshine"
+    BwrapSourcePath = "/usr/bin/bwrap"
     # Sunshine runs as root, so its config lives in the root user's home
     SunshineConfigPath = "/root/.var/app/dev.lizardbyte.app.Sunshine/config/sunshine/sunshine.conf"
     WebUiPort = 47990
@@ -1358,8 +1359,17 @@ class SunshineController:
 
     def _copyBwrap(self) -> bool:
         """
-        Copy the bwrap binary to its dedicated root-owned directory.
-        :return: True if the copy was successful, False otherwise
+        Put a fresh copy of the bwrap binary into its dedicated root-owned
+        directory, by writing it next to the target and renaming it into
+        place. Copying ONTO the target fails with "Text file busy" (ETXTBSY)
+        whenever a process still has the old copy running as its program
+        image: flatpak ps reports Sunshine as gone the moment its instance
+        disappears, while the bwrap process it was exec'd from is still
+        tearing down. A manual stop-then-start hides that behind the seconds
+        the user needs; a restart (which is one backend call) hit it every
+        time. The rename gives the new copy a new inode, so the departing
+        process keeps the old one and nothing has to be waited for.
+        :return: True if the copy is in place, False otherwise
         """
         bwrap_path = self.environment_variables["FLATPAK_BWRAP"]
         bwrap_dir = os.path.dirname(bwrap_path)
@@ -1371,10 +1381,31 @@ class SunshineController:
         except Exception as e:
             self.logger.exception("An error occurred when creating the bwrap directory", exc_info=e)
             return False
-        return self._run_and_check(
-                ["cp", "/usr/bin/bwrap", bwrap_path],
+
+        # Same directory, so the rename below stays within one filesystem and
+        # is atomic; the caller sets ownership and the setuid bit afterwards.
+        staging_path = f"{bwrap_path}.new"
+        if not self._run_and_check(
+                ["cp", self.BwrapSourcePath, staging_path],
                 context="copying bwrap to its dedicated directory"
-        )
+        ):
+            self._removeIfPresent(staging_path)
+            return False
+        try:
+            os.replace(staging_path, bwrap_path)
+        except Exception as e:
+            self.logger.exception(f"An error occurred when moving the bwrap copy into place at {bwrap_path}", exc_info=e)
+            self._removeIfPresent(staging_path)
+            return False
+        return True
+
+    def _removeIfPresent(self, path: str) -> None:
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+        except Exception as e:
+            self.logger.exception(f"An error occurred when removing {path}", exc_info=e)
 
     def _verifySetuidBit(self, path: str) -> bool:
         """

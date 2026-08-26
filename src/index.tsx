@@ -27,6 +27,7 @@ const Content: FC = () => {
   const [areCredentialsValid, setAreCredentialsValid] = useState<boolean | null>(null);
   // The run state Sunshine is currently transitioning to, or null if no transition is in progress
   const [pendingRunState, setPendingRunState] = useState<boolean | null>(null);
+  const [isRestarting, setIsRestarting] = useState<boolean>(false);
   const [sunshineCurrentVersion, setSunshineCurrentVersion] = useState<string | null>(null);
   const [sunshineUpdateVersion, setSunshineUpdateVersion] = useState<string | null>(null);
   const [updateCheckTriggeredManually, setUpdateCheckTriggeredManually] = useState<boolean>(false);
@@ -65,15 +66,17 @@ const Content: FC = () => {
 
   useEffect(() => {
     // Pause the health check while a transition is in progress;
-    // toggleSunshine updates the state itself when it finishes.
-    if (pendingRunState !== null) {
+    // toggleSunshine and restartSunshine update the state themselves when
+    // they finish. A restart in particular would otherwise be reported as
+    // "Stopped" for the moment Sunshine is down.
+    if (pendingRunState !== null || isRestarting) {
       return;
     }
 
     const healthCheck = setInterval(updateSunshineState, HEALTH_CHECK_INTERVAL);
 
     return () => clearInterval(healthCheck);
-  }, [pendingRunState]);
+  }, [pendingRunState, isRestarting]);
 
   const toggleSunshine = async () => {
     const shouldRun = !isSunshineRunning;
@@ -93,6 +96,24 @@ const Content: FC = () => {
     }
   };
 
+  // One backend call, not stop-then-start: users who press this while
+  // streaming lose the stream with the stop, and a second press would have to
+  // happen on a Deck they can no longer see.
+  const restartSunshine = async () => {
+    setIsRestarting(true);
+    try {
+      const success = await backend.restartSunshine();
+      if (!success) {
+        console.error(LOG_TAG, "Failed to restart Sunshine");
+      }
+    } catch (error) {
+      console.error(LOG_TAG, "Failed to restart Sunshine:", error);
+    } finally {
+      await updateSunshineState();
+      setIsRestarting(false);
+    }
+  };
+
   const refreshVersionInfo = async (refreshAppstream: boolean) => {
     setIsRefreshingVersionInfo(true);
     try {
@@ -106,13 +127,16 @@ const Content: FC = () => {
 
   // Show spinner while Sunshine state is being updated or an update is in progress
   const isStartingOrStopping = pendingRunState !== null;
-  const isBusy = isInitializing || isStartingOrStopping || isUpdating;
+  const isBusy = isInitializing || isStartingOrStopping || isUpdating || isRestarting;
   const statusInfo = (() => {
     if (isInitializing) {
       return { label: "Checking status...", color: "#888888" };
     }
     if (isUpdating) {
       return { label: "Updating...", color: "orange" };
+    }
+    if (isRestarting) {
+      return { label: "Restarting...", color: "orange" };
     }
     if (isStartingOrStopping) {
       return {
@@ -153,11 +177,23 @@ const Content: FC = () => {
           </div>
           <ButtonItem
             layout="below"
+            bottomSeparator={isSunshineRunning ? "none" : "standard"}
             disabled={isBusy}
             onClick={() => toggleSunshine()}
           >
             {isSunshineRunning ? "Stop Sunshine" : "Start Sunshine"}
           </ButtonItem>
+          {/* Only offered while it runs - stopped, the button above is the
+              one that does something. */}
+          {isSunshineRunning &&
+            <ButtonItem
+              layout="below"
+              disabled={isBusy}
+              onClick={() => restartSunshine()}
+            >
+              Restart Sunshine
+            </ButtonItem>
+          }
         </div>
       </PanelSectionRow>
 
