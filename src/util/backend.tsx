@@ -44,6 +44,12 @@ class Backend {
         return result === true;
     }
 
+    public restartSunshine = async () : Promise<boolean> => {
+        console.log(LOG_TAG, "should restart")
+        const result = await this.call<[], boolean>("restart_sunshine");
+        return result === true;
+    }
+
     public getSunshineVersionInfo = async (refreshAppstream: boolean): Promise<SunshineVersionInfo | null> => {
         const result = await this.call<[refreshAppstream: boolean], SunshineVersionInfo | null>(
             "get_sunshine_version_info",

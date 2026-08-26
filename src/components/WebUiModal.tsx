@@ -27,9 +27,7 @@ export const WebUiModal: FC<{
     const restartSunshine = async () => {
       setIsRestarting(true);
       try {
-        if (await backend.stopSunshine()) {
-          await backend.startSunshine();
-        }
+        await backend.restartSunshine();
         // Re-check instead of assuming success; on failure the hint stays
         setInfo(await backend.getWebUiInfo());
       } finally {
