@@ -50,11 +50,8 @@ class Backend {
         return result === true;
     }
 
-    public getSunshineVersionInfo = async (refreshAppstream: boolean): Promise<SunshineVersionInfo | null> => {
-        const result = await this.call<[refreshAppstream: boolean], SunshineVersionInfo | null>(
-            "get_sunshine_version_info",
-            refreshAppstream
-        );
+    public getSunshineVersionInfo = async (): Promise<SunshineVersionInfo | null> => {
+        const result = await this.call<[], SunshineVersionInfo | null>("get_sunshine_version_info");
         return result;
     }
 

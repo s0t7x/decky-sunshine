@@ -318,8 +318,8 @@ class Plugin:
             self.settingManager.setSetting("csrfManagedOrigin", managed_new)
         return added_now
 
-    async def get_sunshine_version_info(self, refresh_appstream = True):
-        versionInfo = await self.sunshineController.getSunshineVersionInfo_async(refresh_appstream)
+    async def get_sunshine_version_info(self):
+        versionInfo = await self.sunshineController.getSunshineVersionInfo_async()
         if versionInfo:
             last_current_version = self._last_version_info["current_version"] or 'unknown' if self._last_version_info else 'unknown'
             last_update_version = self._last_version_info["update_version"] or 'unknown' if self._last_version_info else 'unknown'
