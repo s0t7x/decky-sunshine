@@ -108,7 +108,6 @@ class SunshineController:
             self.logger.info(f"Using externally configured PULSE_SERVER: {external_pulse_server}")
         else:
             self.environment_variables["PULSE_SERVER"] = f"unix:{self._findPulseAudioSocketPath()}"
-        self.environment_variables["DISPLAY"] = ":0"
         # bwrap must be setuid root (Sunshine needs CAP_SYS_ADMIN for KMS/DRM
         # capture, which the setuid copy grants inside the flatpak sandbox) and
         # it is executed by the root plugin. It must therefore live in a
@@ -259,10 +258,7 @@ class SunshineController:
             else:
                 self.logger.error("No session user found (no user 'deck', no /run/user/<uid> with uid >= 1000) - audio discovery and the composition override will fail")
 
-            self.logger.info(
-                f"Environment: DISPLAY: {self.environment_variables.get('DISPLAY')} (assumed), "
-                f"PULSE_SERVER: {self.environment_variables.get('PULSE_SERVER')}"
-            )
+            self.logger.info(f"Environment: PULSE_SERVER: {self.environment_variables.get('PULSE_SERVER')}")
 
             self.logger.info(f"Environment: External display: {'connected' if self._isExternalDisplayConnected() else 'not connected'}")
 
@@ -592,9 +588,16 @@ class SunshineController:
         if not await self._to_thread(lambda: self._verifySetuidBit(bwrap_path)):
             return False
 
-        # Run Sunshine
+        # Run Sunshine.
+        # QT_QPA_PLATFORM: Sunshine's tray is Qt-based and aborts the whole
+        # process when Qt finds no usable platform plugin. We run it as root
+        # with no session of our own, so there is nothing for Qt to draw on -
+        # say so explicitly rather than let it search and die. Sunshine detects
+        # that situation itself when no display variable is set at all, but
+        # relying on that would make us depend on a check we do not own.
         try:
-            subprocess.Popen(["flatpak", "run", "--system", "--socket=wayland", self.SunshineFlatpakAppId],
+            subprocess.Popen(["flatpak", "run", "--system", "--socket=wayland",
+                              "--env=QT_QPA_PLATFORM=offscreen", self.SunshineFlatpakAppId],
                              env=self.environment_variables,
                              start_new_session=True)
         except Exception as e:
