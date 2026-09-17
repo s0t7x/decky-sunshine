@@ -29,6 +29,7 @@ const Content: FC = () => {
   const [pendingRunState, setPendingRunState] = useState<boolean | null>(null);
   const [isRestarting, setIsRestarting] = useState<boolean>(false);
   const [sunshineCurrentVersion, setSunshineCurrentVersion] = useState<string | null>(null);
+  const [sunshineUpdateAvailable, setSunshineUpdateAvailable] = useState<boolean>(false);
   const [sunshineUpdateVersion, setSunshineUpdateVersion] = useState<string | null>(null);
   const [updateCheckTriggeredManually, setUpdateCheckTriggeredManually] = useState<boolean>(false);
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
@@ -57,7 +58,7 @@ const Content: FC = () => {
   }, []);
 
   useEffect(() => {
-    refreshVersionInfo(false);
+    refreshVersionInfo();
   }, []);
 
   useEffect(() => {
@@ -114,11 +115,12 @@ const Content: FC = () => {
     }
   };
 
-  const refreshVersionInfo = async (refreshAppstream: boolean) => {
+  const refreshVersionInfo = async () => {
     setIsRefreshingVersionInfo(true);
     try {
-      const versionInfo = await backend.getSunshineVersionInfo(refreshAppstream);
+      const versionInfo = await backend.getSunshineVersionInfo();
       setSunshineCurrentVersion(versionInfo?.current_version ?? null);
+      setSunshineUpdateAvailable(versionInfo?.update_available ?? false);
       setSunshineUpdateVersion(versionInfo?.update_version ?? null);
     } finally {
       setIsRefreshingVersionInfo(false);
@@ -290,11 +292,12 @@ const Content: FC = () => {
               ? <Spinner style={{ width: 14, height: 14 }} />
               : sunshineCurrentVersion || "Unknown"}
           </Field>
-          {sunshineUpdateVersion
+          {sunshineUpdateAvailable
             ? <div style={{ display: "contents" }}>
                 <Field label="Update available" focusable={false} bottomSeparator="none">
                   <span style={{ color: "orange" }}>
-                    {sunshineUpdateVersion} {(sunshineCurrentVersion === sunshineUpdateVersion && "(Rebuild)")}
+                    {sunshineUpdateVersion ?? "Unknown version"}
+                    {sunshineUpdateVersion !== null && sunshineCurrentVersion === sunshineUpdateVersion && " (Rebuild)"}
                   </span>
                 </Field>
                 <ButtonItem
@@ -305,6 +308,7 @@ const Content: FC = () => {
                     try {
                       const success = await backend.updateSunshine();
                       if (success) {
+                        setSunshineUpdateAvailable(false);
                         setSunshineUpdateVersion(null);
                         setUpdateCheckTriggeredManually(false);
                       }
@@ -326,7 +330,7 @@ const Content: FC = () => {
                   disabled={isRefreshingVersionInfo}
                   onClick={async () => {
                     setUpdateCheckTriggeredManually(true);
-                    await refreshVersionInfo(true);
+                    await refreshVersionInfo();
                   }}
                 >
                   Check for updates

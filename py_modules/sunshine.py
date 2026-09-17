@@ -893,47 +893,101 @@ class SunshineController:
 
         return count_after == count_before + 1
 
-    async def getSunshineVersionInfo_async(self, refresh_appstream: bool = True) -> dict | None:
+    async def getSunshineVersionInfo_async(self) -> dict:
         """
         Async variant of getSunshineVersionInfo that doesn't block the event loop.
         """
-        return await self._to_thread(lambda: self.getSunshineVersionInfo(refresh_appstream))
+        return await self._to_thread(self.getSunshineVersionInfo)
 
-    def getSunshineVersionInfo(self, refresh_appstream: bool = True) -> dict | None:
+    def getSunshineVersionInfo(self) -> dict:
         """
-        Get the current and available update version of Sunshine.
-        :param refresh_appstream: Whether to refresh the Flatpak appstream data (requires network access
-                                  and can take a while) before checking for an update
-        :return: A dict with keys 'current_version' and 'update_version', or None if an error occurred
+        Get the installed Sunshine version and, if an update is pending, the
+        version that update would install.
+
+        The two answers come from different places, and only one of them is
+        independent of a cache:
+        - Whether an update exists comes from the remote's ostree summary and
+          holds up even with no appstream data cached at all.
+        - Every version string flatpak prints comes from that cached appstream
+          data, which only 'flatpak update --appstream' refreshes. That is not
+          a quirk of remote-ls: remote-info drops its Version line entirely
+          when the cache is gone, so there is no cache-free string to switch to.
+        Hence decide from the summary, and refresh the appstream only when its
+        label is about to be shown and looks stale - scoped to the remote
+        Sunshine comes from, not to every remote installed.
+        :return: A dict with 'current_version', 'update_available' and
+                 'update_version'
         """
-        info_result = self._run_and_capture_stdout(
-            ["flatpak", "info", self.SunshineFlatpakAppId],
+        installed = self._getInstalledSunshineInfo()
+        current_version = installed.get("version")
+
+        update_available, update_version = self._getRemoteUpdateInfo()
+
+        # A label that is missing, or still names the installed version, is what
+        # a stale cache looks like: refresh once and re-read. One that is still
+        # unchanged afterwards is a real rebuild - same version, new commit.
+        if update_available and (update_version is None or update_version == current_version):
+            origin = installed.get("origin")
+            self.logger.info(
+                f"The update is labelled {update_version or 'with no version'} - refreshing the "
+                f"appstream data of {origin or 'every remote'} before trusting that"
+            )
+            self._run_and_check(
+                ["flatpak", "update", "--appstream"] + ([origin] if origin else []),
+                context="refreshing Flatpak appstream data"
+            )
+            _, update_version = self._getRemoteUpdateInfo()
+
+        return {
+            "current_version": current_version,
+            "update_available": update_available,
+            "update_version": update_version
+        }
+
+    def _getInstalledSunshineInfo(self) -> dict:
+        """
+        Read the installed Sunshine's version and origin remote from
+        'flatpak info'. The origin scopes the appstream refresh in
+        getSunshineVersionInfo to the remote that matters.
+        :return: A dict with 'version' and 'origin' where present; empty if
+                 Sunshine is not installed or the command failed
+        """
+        result = self._run_and_capture_stdout(
+            ["flatpak", "info", "--system", self.SunshineFlatpakAppId],
             context="getting Sunshine version info"
         )
 
-        current_version = None
-        if info_result:
-            for (_, version) in (line.split(":", 1) for line in info_result.splitlines() if "Version:" in line):
-                current_version = version.strip()
+        wanted = ("version", "origin")
+        info = {}
+        for line in (result or "").splitlines():
+            key, separator, value = line.partition(":")
+            key = key.strip().lower()
+            if separator and key in wanted:
+                info[key] = value.strip()
+        return info
 
-        if refresh_appstream:
-            self._run_and_check(['flatpak', 'update', '--appstream'], context="refreshing Flatpak appstream data")
-
+    def _getRemoteUpdateInfo(self) -> tuple[bool, str | None]:
+        """
+        Ask the remotes whether an update for Sunshine is pending and which
+        version string the cached appstream data labels it with.
+        :return: (update pending, version label or None). The label is None
+                 when no appstream data is cached; the pending update is
+                 reported either way.
+        """
         result = self._run_and_capture_stdout(
             ["flatpak", "remote-ls", "--app", "--updates", "--system", "--columns=application,version"],
             context="checking for Sunshine updates"
         )
+        if result is None:
+            return False, None
 
-        update_version = None
-        if result:
-            # The version column can be empty, in which case the line only contains the application id
-            for columns in (line.split() for line in result.splitlines() if self.SunshineFlatpakAppId in line):
-                update_version = columns[1] if len(columns) > 1 else None
-
-        return {
-            "current_version": current_version,
-            "update_version": update_version
-        }
+        for line in result.splitlines():
+            columns = line.split()
+            if columns and columns[0] == self.SunshineFlatpakAppId:
+                # Without cached appstream data the version column is empty and
+                # the line consists of the application id alone
+                return True, columns[1] if len(columns) > 1 else None
+        return False, None
 
     async def updateSunshine_async(self) -> bool:
         """
