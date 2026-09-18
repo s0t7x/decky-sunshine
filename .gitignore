@@ -57,3 +57,15 @@ cli/*
 cli/decky
 
 dev/
+# Test tooling output
+.venv-tests/
+.coverage-data/
+# What tools/coverage.sh writes via COVERAGE_FILE is .coverage-data/; this is
+# the one a plain `coverage run` in the repo root leaves behind instead.
+.coverage
+.stryker-tmp/
+# Written by the throwaway mutation script, not by anything checked in - kept
+# because the reference measurement it holds is still worth having locally
+.mutation-data/
+mutants/
+.mutmut-cache

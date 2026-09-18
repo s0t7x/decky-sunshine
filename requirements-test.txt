@@ -1,0 +1,8 @@
+# Test dependencies for the Python backend. Nothing here ships with the plugin -
+# at runtime the Decky loader provides everything main.py imports.
+pytest>=8,<10
+pytest-asyncio>=1,<2
+pytest-timeout>=2.3,<3
+coverage[toml]>=7.6,<8
+diff-cover>=9,<11
+mutmut>=3,<4

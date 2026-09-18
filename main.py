@@ -174,13 +174,16 @@ class Plugin:
         """
         task = self._crash_watch_task
         self._crash_watch_task = None
-        self._crash_watch_wakeup = None
         if task is not None and not task.done():
             task.cancel()
             try:
                 await task
             except asyncio.CancelledError:
                 pass
+        # Only now: a watchdog that outlives its cancellation by a round still
+        # reaches for this event, and an AttributeError there would take the
+        # stop that cancelled it down with it.
+        self._crash_watch_wakeup = None
 
     async def _watch_for_crash(self):
         """
@@ -218,6 +221,15 @@ class Plugin:
                     await asyncio.wait_for(self._crash_watch_wakeup.wait(), self.CRASH_WATCH_INTERVAL)
                 except asyncio.TimeoutError:
                     pass
+
+            # Python 3.11's wait_for returns the result of a wait that finished
+            # instead of re-raising the cancellation that arrived with it, so a
+            # cancelled watchdog turns up here anyway - and would go on to
+            # restart the very Sunshine the stop behind that cancel is taking
+            # down. Being retired is therefore a state to check, not only an
+            # exception to receive.
+            if self._crash_watch_task is not asyncio.current_task():
+                return
 
             # "" is the intent of a fresh install, which _main starts too
             if self.settingManager.getSetting("lastRunState", "") not in ("start", ""):

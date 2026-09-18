@@ -3,7 +3,10 @@ on:
   push:
     branches:
       - main
-    # Ignore pushes that only modify non-code artifacts
+    # Ignore pushes that only modify non-code artifacts. A merge here cuts a
+    # nightly release, so anything that cannot reach the built plugin belongs
+    # in this list - otherwise a test-only change ships a release whose code
+    # is byte-identical to the one before it.
     paths-ignore:
       - 'README.md'
       - 'LICENSE'
@@ -12,6 +15,13 @@ on:
       - '.github/**'
       - '.gitignore'
       - '.gitattributes'
+      - 'tests/**'
+      - 'tools/**'
+      - 'pyproject.toml'
+      - 'requirements-test.txt'
+      - 'vitest.config.ts'
+      - 'tsconfig.test.json'
+      - 'stryker.config.json'
   # Allow manual runs regardless of changed paths
   workflow_dispatch:
 
