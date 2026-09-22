@@ -10,7 +10,7 @@ jobs:
       issues: write
     steps:
       - name: Cleanup autoclose artifacts
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const { owner, repo } = context.repo;

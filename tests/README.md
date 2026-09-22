@@ -88,10 +88,14 @@ catches a deleted test: removing one changes no production line, so a check
 that only looks at the diff has nothing to look at.
 
 Both are currently at the top of their range (99.79% combined for Python, 100%
-for the frontend), so there is no headroom left: a new production line without
-a test fails the gate rather than merely eating into a margin. That is the
-ratchet working as asked for, and the `coverage-override` label below is the
-way past it when a change is worth merging anyway.
+for the frontend on statements, functions and lines), so there is no headroom
+left: a new production line without a test fails the gate rather than merely
+eating into a margin. The frontend branch threshold is the one exception at
+99.27%, and it is not a gap in the tests - from Vitest 4 on the v8 remapper
+miscounts one branch in `index.tsx`; `vitest.config.ts` has the reduced case,
+and `autoUpdate` raises the number back to 100 on its own once that is fixed.
+That is the ratchet working as asked for, and the `coverage-override` label
+below is the way past it when a change is worth merging anyway.
 
 The three uncovered branch edges in Python are loop conditions that cannot go
 the other way - the body breaks or returns first.
