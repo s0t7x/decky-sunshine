@@ -1,0 +1,92 @@
+name: Mutation testing
+
+# What mutation testing is and how to read its number: tests/README.md. It
+# reports rather than gates - minutes rather than seconds, and the number moves
+# for reasons that are nobody's fault.
+#
+# Triggered by pushes that touch code rather than on a schedule: a scheduled run
+# on an unchanged tree produces the same answer twice, GitHub disables cron
+# workflows after 60 days of repository inactivity, and `paths` filters do not
+# work with `schedule` at all. This way every result belongs to one commit.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'py_modules/**'
+      - 'main.py'
+      - 'tests/**'
+      - 'requirements-test.txt'
+      # NOT package.json: the release job commits a version bump touching
+      # nothing else, and that run would cancel the one for the real merge
+  workflow_dispatch:
+
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python mutants
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install test dependencies
+        run: pip install -r requirements-test.txt
+
+      - name: Run mutants
+        run: mutmut run
+
+      - name: Report
+        if: always()
+        run: |
+          {
+            echo '## Python mutants'
+            echo '```'
+            mutmut results
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  frontend:
+    name: Frontend mutants
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run mutants
+        run: pnpm run mutation
+
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: stryker-report
+          path: .stryker-tmp/report.html
+          if-no-files-found: ignore

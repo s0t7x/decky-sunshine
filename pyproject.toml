@@ -1,0 +1,42 @@
+# Python tooling config for the plugin backend. There is no Python package to
+# build here - the Decky loader imports main.py directly - so this file only
+# configures the test and coverage tools.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+# No single test may hang: without this one stuck test holds a CI runner for the
+# job's whole limit and never says which one it was. The slowest real test here
+# waits about two seconds.
+timeout = 60
+# "thread" rather than the default signal method: these tests run an asyncio
+# loop, and a mutant that turns the watchdog into a busy loop keeps the main
+# thread from ever handling SIGALRM. The thread method kills the process.
+timeout_method = "thread"
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+branch = true
+source = ["py_modules", "."]
+omit = ["tests/*", ".venv-tests/*", "*/site-packages/*"]
+
+[tool.coverage.report]
+# Without this, coverage rounds the total to whole percent before comparing it
+# with fail_under - a floor of 99.78 would pass at 99.5.
+precision = 2
+# The ratchet - see tests/README.md. tools/coverage.sh raises it after a
+# better run; it never moves down.
+fail_under = 99.78
+show_missing = true
+skip_empty = true
+
+[tool.mutmut]
+# main.py only: mutmut cannot see py_modules/sunshine.py, because it names
+# mutants after the file path while everything imports that module as plain
+# "sunshine". tests/README.md has the detail.
+source_paths = ["main.py"]
+# sunshine.py still has to be there for the tests to import, just not mutated.
+also_copy = ["py_modules"]
+# A mutant on a line no test reaches survives for free and says nothing about
+# the tests, so it is not worth the seconds it costs to run.
+mutate_only_covered_lines = true

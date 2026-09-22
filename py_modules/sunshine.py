@@ -52,6 +52,8 @@ class RequestResult:
 class SunshineController:
     SunshineFlatpakAppId = "dev.lizardbyte.app.Sunshine"
     BwrapSourcePath = "/usr/bin/bwrap"
+    MountsPath = "/proc/self/mounts"
+    OsReleasePath = "/etc/os-release"
     # Sunshine runs as root, so its config lives in the root user's home
     SunshineConfigPath = "/root/.var/app/dev.lizardbyte.app.Sunshine/config/sunshine/sunshine.conf"
     WebUiPort = 47990
@@ -306,7 +308,7 @@ class SunshineController:
         """
         entries = {}
         try:
-            with open("/etc/os-release") as f:
+            with open(self.OsReleasePath) as f:
                 for line in f:
                     line = line.strip()
                     if not line or line.startswith("#") or "=" not in line:
@@ -337,7 +339,7 @@ class SunshineController:
         try:
             real_path = os.path.realpath(path)
             best = None
-            with open("/proc/self/mounts") as f:
+            with open(self.MountsPath) as f:
                 for line in f:
                     fields = line.split()
                     if len(fields) < 4:

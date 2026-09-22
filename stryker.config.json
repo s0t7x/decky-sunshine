@@ -1,0 +1,40 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "_comment": "Mutation testing for the frontend; see tests/README.md. The Python half is mutmut, configured in pyproject.toml.",
+  "packageManager": "pnpm",
+  "testRunner": "vitest",
+  "plugins": [
+    "@stryker-mutator/vitest-runner"
+  ],
+  "vitest": {
+    "configFile": "vitest.config.ts"
+  },
+  "mutate": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "!src/util/types.tsx"
+  ],
+  "ignorePatterns": [
+    "node_modules",
+    ".git",
+    ".stryker-tmp",
+    ".mutation-data",
+    ".coverage-data",
+    ".venv-tests",
+    "dist"
+  ],
+  "reporters": [
+    "clear-text",
+    "html",
+    "json"
+  ],
+  "htmlReporter": {
+    "fileName": ".stryker-tmp/report.html"
+  },
+  "coverageAnalysis": "perTest",
+  "timeoutMS": 20000,
+  "tempDirName": ".stryker-tmp/sandbox",
+  "jsonReporter": {
+    "fileName": ".stryker-tmp/report.json"
+  }
+}

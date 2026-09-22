@@ -1,0 +1,133 @@
+name: Tests
+
+on:
+  # labeled is not in the default set, and without it the coverage-override
+  # label never reaches a run: it is put on a PR that already failed
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# A new push supersedes the run it interrupted; nobody reads the old result.
+# Not on main: there the cancelled run is the only one that commit ever gets.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Read-only unless a job asks for more; the default token is far wider
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python tests
+    runs-on: ubuntu-latest
+    # Without a limit a hung test holds a runner for the six-hour default, and
+    # the file it hung in is not even visible - its ::endgroup:: never prints
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.11 is the production one, and not because SteamOS is old: the
+        # Decky loader is a PyInstaller bundle and brings its own interpreter.
+        # A Deck on SteamOS 3.8.16, whose own python3 is 3.13.5, maps
+        # libpython3.11 in the plugin process. The version therefore moves
+        # with the loader, not with the OS - and the first run of this matrix
+        # found a bug that exists on 3.11 alone. The other two are headroom.
+        python-version: ['3.11', '3.12', '3.13']
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install test dependencies
+        run: pip install -r requirements-test.txt
+
+      - name: Run tests
+        run: pytest
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out
+        # diff-cover needs the history to work out what this PR changed
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install test dependencies
+        run: pip install -r requirements-test.txt
+
+      # --fail-under=0 on the xml: coverage honours the floor in every
+      # reporting command, so without it this step fails before the gate
+      # below ever runs - and the override label, which guards that gate,
+      # has nothing left to skip.
+      - name: Measure
+        run: |
+          coverage run -m pytest -q
+          coverage xml -o coverage.xml --fail-under=0
+
+      # The ratchet (fail_under in pyproject.toml): what catches a deleted
+      # test, which the patch check below cannot see. See tests/README.md.
+      - name: Coverage may not fall below the recorded floor
+        if: ${{ !contains(github.event.pull_request.labels.*.name, 'coverage-override') }}
+        run: coverage report
+
+      # And this catches the other direction: code added without tests, which
+      # the ratchet can miss when a large covered change offsets it.
+      - name: New and changed lines must be 80% covered
+        if: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'coverage-override') }}
+        run: |
+          diff-cover coverage.xml \
+            --compare-branch=origin/${{ github.base_ref }} \
+            --fail-under=80
+
+      # --fail-under=0: the gate is the step above. Without it this one
+      # enforces the floor again and the override label achieves nothing.
+      - name: Report
+        if: always()
+        run: coverage report --format=markdown --fail-under=0 >> "$GITHUB_STEP_SUMMARY"
+
+  frontend:
+    name: Frontend tests and types
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm run typecheck
+
+      # autoUpdate off here on purpose: locally a better run raises the
+      # thresholds in vitest.config.ts and they get committed. In CI the
+      # recorded numbers are the floor, and nothing edits the repo.
+      - name: Run tests with coverage
+        run: pnpm run coverage -- --coverage.thresholds.autoUpdate=false
