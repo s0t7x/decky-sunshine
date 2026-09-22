@@ -1,6 +1,6 @@
 {
   "name": "decky-sunshine",
-  "version": "2026.09.17-6c84c59",
+  "version": "2026.09.22-d12ff9c",
   "description": "Stream your Steam Deck screen to another device with minimal effort.",
   "type": "module",
   "scripts": {
