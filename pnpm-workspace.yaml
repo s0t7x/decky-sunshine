@@ -1,0 +1,13 @@
+# esbuild ships its binary through 26 optionalDependencies, one per platform,
+# and its postinstall is the fallback for setups where that resolution fails -
+# it downloads the binary straight from npm instead. Here it does not: pnpm
+# installs @esbuild/linux-x64 correctly, and vitest and rollup reach esbuild
+# through its JS API, which resolves the platform package itself at runtime.
+# The script's other job is replacing bin/esbuild with a hardlink to the real
+# binary, which only saves a Node startup on command-line calls we never make.
+#
+# So false is the written form of what has always happened. Without this line
+# pnpm 12 ends every install with ERR_PNPM_IGNORED_BUILDS - an error locally,
+# while CI on pnpm 10 only warns. Both versions accept this file and go quiet.
+allowBuilds:
+  esbuild: false
