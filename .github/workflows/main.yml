@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set version (commit date-sha)
         id: version
@@ -63,7 +63,7 @@ jobs:
 
       - name: Nightly Release
         if: steps.build.outcome == 'success'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           prerelease: true
           generate_release_notes: true
