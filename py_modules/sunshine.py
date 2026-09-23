@@ -245,7 +245,11 @@ class SunshineController:
         try:
             os_release = self._readOsRelease()
             os_id = os_release.get("ID", "unknown")
-            self.logger.info(f"Environment: OS: {os_release.get('PRETTY_NAME', 'unknown')} (ID={os_id})")
+            # On a Deck PRETTY_NAME is just "SteamOS", so the version and build
+            # only show up here
+            os_details = [f"ID={os_id}"] + [f"{key}={os_release[key]}" for key in ("VERSION_ID", "BUILD_ID")
+                                            if key in os_release]
+            self.logger.info(f"Environment: OS: {os_release.get('PRETTY_NAME', 'unknown')} ({', '.join(os_details)})")
             if os_id != "steamos":
                 self.logger.warning("OS is not SteamOS - this plugin makes Steam-Deck-specific assumptions that may not hold here")
 
