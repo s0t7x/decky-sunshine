@@ -140,7 +140,7 @@ other way - by path through `importlib.util`, or after removing the
 `sys.modules` entry - would get a second copy of the module, and patch one
 while the code under test ran the other.
 
-The last run: **2401 mutants, 65 survived**, the rest killed - 6 or 7 of them
+The last run: **2401 mutants, 64 survived**, the rest killed - 6 or 7 of them
 by timeout, depending on how busy the machine is. About three minutes.
 
 On `main.py` the current state is 550 mutants, 539 killed, 11 survived (98%).
@@ -174,7 +174,7 @@ pads it with `XX...XX`, and only an assertion on the entire line kills that
 one. Changing a message is therefore expected to break a test - that is the
 test doing its job, not brittleness.
 
-### The 65 that survive in `sunshine.py` and `main.py`
+### The 64 that survive in `sunshine.py` and `main.py`
 
 Eleven are in `main.py` and listed above. The rest fall into a handful of
 kinds, all of them equivalent unless noted:
@@ -197,8 +197,8 @@ kinds, all of them equivalent unless noted:
 * **`split("-", 1)` losing its maxsplit** (2): DRM connector directories are
   `card0-eDP-1`, and every maxsplit gives a segment with the same prefix.
 * **A handful of others** where a test would have to be built around a value
-  nobody would write (a mount point ending in `X`, two mount points of equal
-  length, a `getattr` default spelled two ways).
+  nobody would write (a mount point ending in `X`, a `getattr` default spelled
+  two ways).
 
 Nothing in that list is a missing assertion. What *was* missing is now
 covered: the exact command line of every `flatpak`, `su` and `cp` call and the

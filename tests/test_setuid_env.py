@@ -143,6 +143,18 @@ def test_the_deepest_mount_is_found_among_forty_others(make_controller):
     assert controller._findMountEntry("/home/deck/x")[0] == "/home"
 
 
+
+def test_of_two_mounts_on_the_same_point_the_later_one_counts(make_controller):
+    """The Deck stacks binfmt_misc on top of an autofs trigger at the same
+    mount point, and /proc/self/mounts lists them in mount order - so the
+    later line is the one that is actually there. The two disagree on the
+    very thing this lookup exists for: the autofs line is not nosuid, the
+    binfmt_misc line on top of it is."""
+    controller = make_controller(mounts=DECK_MOUNTS)
+
+    assert controller._findMountEntry("/proc/sys/fs/binfmt_misc/status") == \
+        ("/proc/sys/fs/binfmt_misc", "binfmt_misc", "rw,nosuid,nodev,noexec,relatime")
+
 def test_the_deck_puts_tmp_on_a_nosuid_mount(make_controller):
     """Which is why the copy is not there any more: the legacy location was
     inside the plugin runtime directory, and every /tmp-shaped fallback has the

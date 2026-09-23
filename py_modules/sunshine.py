@@ -334,7 +334,8 @@ class SunshineController:
     def _findMountEntry(self, path: str) -> tuple[str, str, str] | None:
         """
         Find the mount responsible for the given path (the path does not have
-        to exist yet) via the longest matching mount point in /proc/self/mounts.
+        to exist yet) via the longest matching mount point in /proc/self/mounts,
+        and the last one listed when several share it.
         :return: A tuple (mount_point, fstype, options), or None if it could not be determined
         """
         try:
@@ -348,7 +349,9 @@ class SunshineController:
                     # Special characters in mount points are octal-escaped (e.g. \040 for space)
                     mount_point = re.sub(r"\\([0-7]{3})", lambda m: chr(int(m.group(1), 8)), fields[1])
                     if real_path == mount_point or real_path.startswith(mount_point.rstrip("/") + "/"):
-                        if best is None or len(mount_point) > len(best[0]):
+                        # >=: a mount on top of another at the same point comes
+                        # later in the file, and it is the one that is there
+                        if best is None or len(mount_point) >= len(best[0]):
                             best = (mount_point, fields[2], fields[3])
             return best
         except Exception as e:
