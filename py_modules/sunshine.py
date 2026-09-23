@@ -619,38 +619,30 @@ class SunshineController:
             await asyncio.sleep(wait_time)
         self.logger.info(f"Sunshine process found after {time.monotonic() - waiting_since:.1f} seconds")
 
-        if not await self._waitForWebUi():
-            return False
+        # The process shows up a moment before the Web UI listens, and a start
+        # that reported back in that gap would send the panel's first status
+        # poll into a refused connection - an error in the log for a Sunshine
+        # that was merely still coming up. A Web UI that does not answer in
+        # time still counts as started, because the process is running:
+        # failing the start would record "stop" as the user's intent and leave
+        # the crash watch unarmed.
+        web_ui_timeout = 30
+        waiting_since = time.monotonic()
+        while True:
+            if await self._to_thread(self._isWebUiReachable):
+                self.logger.info(f"Sunshine's Web UI is up after {time.monotonic() - waiting_since:.1f} seconds")
+                break
+            if not await self.isSunshineRunning_async():
+                self.logger.error("Sunshine exited before its Web UI came up")
+                return False
+            if time.monotonic() - waiting_since >= web_ui_timeout:
+                self.logger.warning(f"Sunshine is running, but its Web UI did not answer within {web_ui_timeout} seconds")
+                break
+            await asyncio.sleep(wait_time)
 
         if self.force_composition:
             await self._applyCompositionForce()
 
-        return True
-
-    async def _waitForWebUi(self) -> bool:
-        """
-        Wait until Sunshine's Web UI accepts connections. The process shows up
-        a moment before the Web UI listens, and a start that reported back in
-        that gap would send the panel's first status poll into a refused
-        connection - an error in the log for a Sunshine that was merely still
-        coming up.
-        :return: False if the process exited while waiting, True otherwise -
-                 also when the Web UI did not answer in time, because the
-                 process is running: failing the start would record "stop" as
-                 the user's intent and leave the crash watch unarmed.
-        """
-        timeout = 30
-        wait_time = 0.25
-        waiting_since = time.monotonic()
-        while not await self._to_thread(self._isWebUiReachable):
-            if not await self.isSunshineRunning_async():
-                self.logger.error("Sunshine exited before its Web UI came up")
-                return False
-            if time.monotonic() - waiting_since >= timeout:
-                self.logger.warning(f"Sunshine is running, but its Web UI did not answer within {timeout} seconds")
-                return True
-            await asyncio.sleep(wait_time)
-        self.logger.info(f"Sunshine's Web UI is up after {time.monotonic() - waiting_since:.1f} seconds")
         return True
 
     def _isWebUiReachable(self) -> bool:

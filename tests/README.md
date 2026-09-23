@@ -148,8 +148,8 @@ top-level module is ordinary Python; mutmut supports one spelling of it.
 4. in `tests/conftest.py`, swap the two `sys.path` entries so the root comes
    before `py_modules`.
 
-That gives 2405 mutants, 0 uncovered, about three minutes. The last run:
-**2333 killed, 65 survived, 7 timeouts.** The suite is green in that
+That gives 2401 mutants, 0 uncovered, about three minutes. The last run:
+**2330 killed, 65 survived, 6 timeouts.** The suite is green in that
 configuration too.
 
 Whether to make this permanent is open: the symlink is production surface
