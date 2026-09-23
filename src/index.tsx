@@ -275,9 +275,14 @@ const Content: FC = () => {
             ? "Fixes the stream being squeezed into part of the screen while docked. Only takes effect while an external display is connected; may slightly increase GPU load then."
             : undefined}
           checked={forceComposition}
-          onChange={(value: boolean) => {
+          onChange={async (value: boolean) => {
             setForceComposition(value);
-            backend.setForceComposition(value);
+            // Show what is stored rather than flipping back blindly: the call
+            // can fail after the value was saved, while applying it to a
+            // running Sunshine
+            if (!(await backend.setForceComposition(value))) {
+              setForceComposition(await backend.getForceComposition());
+            }
           }}
         />
       </PanelSectionRow>
