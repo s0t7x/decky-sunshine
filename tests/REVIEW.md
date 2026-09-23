@@ -136,8 +136,8 @@ No comment that restates the line below it in prose.
 ### K3 - Not redundant with other comments
 
 One canonical place per subject, a one-line pointer everywhere else. The
-coverage ratchet was explained in five places and the mutmut limitation in
-four; both now live in `tests/README.md` and are referenced.
+coverage ratchet was once explained in five places; it now lives in
+`tests/README.md` and is referenced.
 
 ### K4 - The claim has to carry
 
