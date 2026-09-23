@@ -148,8 +148,8 @@ top-level module is ordinary Python; mutmut supports one spelling of it.
 4. in `tests/conftest.py`, swap the two `sys.path` entries so the root comes
    before `py_modules`.
 
-That gives 2385 mutants, 0 uncovered, about three minutes. The last run:
-**2300 killed, 76 survived, 9 timeouts.** The suite is green in that
+That gives 2405 mutants, 0 uncovered, about three minutes. The last run:
+**2333 killed, 65 survived, 7 timeouts.** The suite is green in that
 configuration too.
 
 Whether to make this permanent is open: the symlink is production surface
@@ -187,24 +187,24 @@ pads it with `XX...XX`, and only an assertion on the entire line kills that
 one. Changing a message is therefore expected to break a test - that is the
 test doing its job, not brittleness.
 
-### The 76 that survive in `sunshine.py` and `main.py`
+### The 65 that survive in `sunshine.py` and `main.py`
 
 Eleven are in `main.py` and listed above. The rest fall into a handful of
 kinds, all of them equivalent unless noted:
 
-* **Case of a name that is matched case-insensitively** (~14): HTTP header
+* **Case of a name that is matched case-insensitively** (~15): HTTP header
   names (`"Accept"` &rarr; `"ACCEPT"`), which urllib normalises, and codec
   names (`'utf-8'` &rarr; `'UTF-8'`), which Python's codec lookup does.
 * **`XX…XX` inside a character set** (~4): `rstrip("/")` &rarr;
   `rstrip("XX/XX")` adds `X` to the set. Only a path or value ending in `X`
   would tell them apart.
-* **A fallback string that the surrounding code never renders** (~20): the
+* **A fallback string that the surrounding code never renders** (~13): the
   `'second'`/`'seconds'` halves that the fixed `wait_time` at each site never
   reaches, and `(result or "")` &rarr; `"XXXX"`, where neither spelling
   matches anything.
 * **Falsy replaced by falsy** (~8): `None` for `False` or `""` in values that
   are only ever tested for truthiness.
-* **Loop guards that cannot differ** (~6): `while retry_count > 0` &rarr;
+* **Loop guards that cannot differ** (~5): `while retry_count > 0` &rarr;
   `>= 0`, where the body always returns or breaks at zero, and `tick += 1`
   &rarr; `-= 1` under a `% 6 == 0` test.
 * **`split("-", 1)` losing its maxsplit** (2): DRM connector directories are
@@ -217,7 +217,7 @@ Nothing in that list is a missing assertion. What *was* missing is now
 covered: the exact command line of every `flatpak`, `su` and `cp` call and the
 `context=` each carries into the log; the environment and session Sunshine is
 spawned with; the glob patterns the sysfs and `/run/user` searches use; the
-HTTP headers; the socket family, type and timeout of both probes; and every
+HTTP headers; the socket kind, address and timeout of every probe; and every
 log line.
 
 Stryker's number for the frontend is 80%, out of 625 mutants: 496 killed,

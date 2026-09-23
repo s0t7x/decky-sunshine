@@ -16,10 +16,12 @@ log is the whole explanation of a minute spent waiting - and is checked as
 part of each gate.
 """
 import asyncio
+import socket
 import subprocess
 
 import pytest
 
+import sunshine as sunshine_module
 from sunshine import SunshineController
 
 
@@ -388,7 +390,6 @@ async def test_the_wait_for_the_process_is_bounded_at_twenty_retries(
 def clock(monkeypatch):
     """A monotonic clock that only the (instant) sleeps move forward, so a
     wait bounded in seconds ends in a test and reports a known duration."""
-    import sunshine as sunshine_module
 
     class Clock:
         now = 1000.0
@@ -468,7 +469,6 @@ async def test_the_override_is_left_alone_when_sunshine_exits_while_starting(
 def test_a_listening_web_ui_port_counts_as_reachable(bare_controller):
     """Against a real socket: the stubs above only say what start_async does
     with the answer, not whether the answer is right."""
-    import socket
     with socket.create_server(("127.0.0.1", 0)) as server:
         controller = bare_controller(WebUiPort=server.getsockname()[1])
 
@@ -480,12 +480,33 @@ def test_a_closed_web_ui_port_does_not_count_as_reachable(bare_controller):
     state of the port while Sunshine is still coming up. Held rather than
     closed, so nothing else can start listening there meanwhile (and because
     WSL's mirrored networking keeps accepting on a port that was just closed)."""
-    import socket
     with socket.socket() as held:
         held.bind(("127.0.0.1", 0))
         controller = bare_controller(WebUiPort=held.getsockname()[1])
 
         assert controller._isWebUiReachable() is False
+
+
+def test_the_web_ui_probe_gives_up_after_a_second(bare_controller, monkeypatch):
+    """On localhost a closed port is refused at once, but a firewall that drops
+    packets on lo makes a connect without a timeout hang for minutes - once per
+    quarter-second step, with the panel sitting at "Starting..." throughout."""
+    calls = []
+
+    class FakeConnection:
+        def close(self):
+            pass
+
+    def fake_create_connection(address, timeout=None):
+        calls.append((address, timeout))
+        return FakeConnection()
+
+    monkeypatch.setattr(sunshine_module.socket, "create_connection", fake_create_connection)
+    controller = bare_controller(WebUiPort=47990)
+
+    assert controller._isWebUiReachable() is True
+    assert calls == [(("127.0.0.1", 47990), 1)]
+
 
 async def test_a_spawn_that_raises_reports_failure(spawn_controller, monkeypatch, logger):
     failure = OSError("flatpak not found")

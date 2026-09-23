@@ -693,14 +693,14 @@ class SunshineController:
 
         retry_count = 20
         wait_time = 0.25
+        waiting_since = time.monotonic()
         while await self.isSunshineRunning_async() and retry_count > 0:
             retry_count -= 1
             if retry_count == 0:
                 self.logger.error("Aborting wait for Sunshine process to end.")
                 return False
-            self.logger.info(f"Sunshine process not ended yet. Checking again in {wait_time} {'second' if wait_time == 1 else 'seconds'}")
-
             await asyncio.sleep(wait_time)
+        self.logger.info(f"Sunshine process ended after {time.monotonic() - waiting_since:.1f} seconds")
 
         return True
 

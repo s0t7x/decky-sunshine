@@ -83,13 +83,17 @@ def stop(slept):
 
     async def _stop(controller):
         real_sleep = sunshine_module.asyncio.sleep
+        # Moved only by the sleeps, so the duration the stop reports is known
+        now = [1000.0]
 
         async def instant(seconds):
             slept.append(seconds)
+            now[0] += seconds
             await real_sleep(0)
 
         with pytest.MonkeyPatch.context() as patch:
             patch.setattr(sunshine_module.asyncio, "sleep", instant)
+            patch.setattr(sunshine_module.time, "monotonic", lambda: now[0])
             return await controller.stop_async()
 
     return _stop
@@ -121,8 +125,10 @@ async def test_a_slow_teardown_is_waited_out_rather_than_failed(make_controller,
     controller = make_controller(running=True, running_for=5)
 
     assert await stop(controller) is True
-    assert "Sunshine process not ended yet. Checking again in 0.25 seconds" in logger.infos, \
+    assert "Sunshine process ended after 1.0 seconds" in logger.infos, \
         "a slow stop has to be visible in the log"
+    assert not any("not ended yet" in line for line in logger.all()), \
+        "one line for the outcome, not one per quarter second"
 
 
 async def test_a_sunshine_that_never_stops_reports_failure(make_controller, stop, logger):
