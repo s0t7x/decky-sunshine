@@ -365,8 +365,9 @@ def test_another_http_error_is_not_an_authentication_problem(api, logger):
 
 
 def test_a_refused_connection_means_sunshine_is_not_up_yet(api, logger):
-    """_initSunshine waits on exactly this while the Web UI is still coming
-    up after a fresh install."""
+    """Told apart from other failures, though no caller acts on the
+    difference today: start_async waits for the port before any request is
+    made, and _initSunshine retries on every failure alike."""
     # No errno, so only the ConnectionRefusedError branch can catch it;
     # test_a_refusal_reported_as_a_plain_oserror_counts_too covers the other.
     controller = api(raises=URLError(ConnectionRefusedError("Connection refused")))
