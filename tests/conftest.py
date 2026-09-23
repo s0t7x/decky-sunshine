@@ -20,19 +20,26 @@ import types
 
 import pytest
 
-# The loader puts both of these on the path at runtime, so the tests have to see
-# them the same way.
+# The loader puts the plugin directory and py_modules on the path, and main.py
+# does `import sunshine`. The tests load that same file as py_modules.sunshine
+# instead - a namespace package, no __init__.py needed - and register it under
+# the plain name as well, so main.py and every test share one module object.
 #
-# Derived from this file's own location rather than declared as pythonpath in
-# pyproject.toml, and that is not a style choice: mutmut runs the suite against
-# a copy of the tree under mutants/, and a path spelled out in the pytest config
-# is resolved against the original checkout - the tests would then import the
-# unmutated sunshine.py and every mutant in it would look untested.
+# The dotted name is for mutmut. It names each mutant after the file path
+# (py_modules.sunshine) and matches it against the __module__ the function
+# reports at run time; under the plain name the two never meet, and every
+# mutant in sunshine.py comes back "no tests".
+#
+# The root is derived from this file's own location rather than declared as
+# pythonpath in pyproject.toml, and that is not a style choice either: mutmut
+# runs the suite against a copy of the tree under mutants/, and a path spelled
+# out in the pytest config is resolved against the original checkout - the
+# tests would then import the unmutated files.
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO = os.path.dirname(_HERE)
-for _path in (_REPO, os.path.join(_REPO, "py_modules")):
-    if _path not in sys.path:
-        sys.path.insert(0, _path)
+if _REPO not in sys.path:
+    sys.path.insert(0, _REPO)
+sys.modules["sunshine"] = importlib.import_module("py_modules.sunshine")
 
 
 class RecordingLogger:

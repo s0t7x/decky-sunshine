@@ -121,40 +121,26 @@ mutmut show <mutant>      # the diff for one of them
 pnpm run mutation         # frontend (Stryker)
 ```
 
-**`py_modules/sunshine.py` is not covered by a plain `mutmut run`,** but it has
-been measured. Two assumptions in mutmut 3.8 are hardwired and together they
-lose the file:
-
-* `utils/format_utils.py::get_mutant_name` derives the module name from the
-  *file path* and strips exactly one prefix, `src.`. Ours becomes
-  `py_modules.sunshine`.
-* `utils/file_utils.py::setup_source_paths` puts exactly `.`, `src` and
-  `source` on the sandbox's `sys.path`.
-
-At run time the trampoline records `orig.__module__`, which is plain
-`sunshine`, because the Decky loader puts `py_modules` on `sys.path` rather
-than treating it as a package. The two keys never meet and every mutant there
+**`py_modules/sunshine.py` is mutated only because of how the tests import
+it.** mutmut 3.8 names each mutant after the *file path* - here
+`py_modules.sunshine` - and matches it against the `__module__` the function
+reports at run time. The Decky loader puts `py_modules` on `sys.path` and
+`main.py` does `import sunshine`, so a test suite that imports it the same way
+reports plain `sunshine`, the two keys never meet, and every mutant in the file
 comes back "no tests". (mutmut has a check for exactly this,
 `_check_test_to_mutant_associations`, but it only fires when *no* key matches -
-`main.py`'s do, so it stays quiet.) A directory on `sys.path` holding a
-top-level module is ordinary Python; mutmut supports one spelling of it.
+`main.py`'s do, so it would stay quiet.)
 
-**To measure it anyway**, four temporary changes, none of them committed:
+`tests/conftest.py` therefore loads the file as `py_modules.sunshine` - a
+namespace package, no `__init__.py` - and registers the same module object
+under `sunshine` in `sys.modules`, which is what `main.py` and the tests then
+get. Nothing in the shipped plugin changes. A test that loaded the file some
+other way - by path through `importlib.util`, or after removing the
+`sys.modules` entry - would get a second copy of the module, and patch one
+while the code under test ran the other.
 
-1. `ln -s py_modules/sunshine.py sunshine.py` in the repository root,
-2. `source_paths = ["main.py", "sunshine.py"]`,
-3. `also_copy = []` - otherwise the unmutated copy under `mutants/py_modules/`
-   wins the import,
-4. in `tests/conftest.py`, swap the two `sys.path` entries so the root comes
-   before `py_modules`.
-
-That gives 2401 mutants, 0 uncovered, about three minutes. The last run:
-**2330 killed, 65 survived, 6 timeouts.** The suite is green in that
-configuration too.
-
-Whether to make this permanent is open: the symlink is production surface
-(`decky plugin build` packs it). The alternatives are making `py_modules` a
-real package, a purpose-built `tools/mutation.py`, or cosmic-ray.
+The last run: **2401 mutants, 65 survived**, the rest killed - 6 or 7 of them
+by timeout, depending on how busy the machine is. About three minutes.
 
 On `main.py` the current state is 550 mutants, 539 killed, 11 survived (98%).
 Every one of the eleven has been looked at, and all eleven are equivalent -
