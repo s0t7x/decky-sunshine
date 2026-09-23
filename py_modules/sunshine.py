@@ -1082,7 +1082,7 @@ class SunshineController:
             # overwrites a timeout attribute set on the Request object.
             with self.opener.open(request, timeout=5) as response:
                 if response.getcode() != OK:
-                    self.logger.error(f"Request to path '{path}' with data '{data}' failed with code: {response.getcode()}")
+                    self.logger.error(f"Request to path '{path}' failed with code: {response.getcode()}")
                     return RequestResult.failure(RequestError.OTHER)
                 encoding = response.headers.get_content_charset() or "utf-8"
                 content = response.read().decode(encoding)
@@ -1092,7 +1092,7 @@ class SunshineController:
             if e.code == UNAUTHORIZED:
                 return RequestResult.failure(RequestError.UNAUTHORIZED)
             else:
-                self.logger.error(f"HTTP error in request to path '{path}' with data '{data}', code: {e.code}, reason: {e.reason}")
+                self.logger.error(f"HTTP error in request to path '{path}', code: {e.code}, reason: {e.reason}")
                 return RequestResult.failure(RequestError.OTHER)
 
         except URLError as e:
@@ -1101,14 +1101,14 @@ class SunshineController:
             if isinstance(e.reason, ConnectionRefusedError) or (
                 isinstance(e.reason, OSError) and getattr(e.reason, "errno", None) == 111
             ):
-                self.logger.error(f"Server not reachable when requesting path '{path}' with data '{data}': Connection refused")
+                self.logger.error(f"Server not reachable when requesting path '{path}': Connection refused")
                 return RequestResult.failure(RequestError.UNREACHABLE)
             else:
-                self.logger.error(f"URL error in request to path '{path}' with data '{data}', reason: {e.reason}")
+                self.logger.error(f"URL error in request to path '{path}', reason: {e.reason}")
                 return RequestResult.failure(RequestError.OTHER)
 
         except Exception as e:
-            self.logger.exception(f"An error occurred when performing a request to path '{path}' with data '{data}'", exc_info=e)
+            self.logger.exception(f"An error occurred when performing a request to path '{path}'", exc_info=e)
             return RequestResult.failure(RequestError.OTHER)
 
     def _createRequest(self, path, data=None) -> Request:
