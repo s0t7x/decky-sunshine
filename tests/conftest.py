@@ -124,8 +124,8 @@ class FakeSettingsManager:
         self.name = name
         self.settings_directory = settings_directory
 
-    def read(self):
-        pass
+    # No read(): the real constructor reads the file itself, and a read()
+    # after it is the redundancy _main used to have.
 
     def getSetting(self, key, default=None):
         return self.settings.get(key, default)
