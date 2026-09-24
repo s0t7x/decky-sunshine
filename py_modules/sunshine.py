@@ -1075,18 +1075,26 @@ class SunshineController:
 
     async def updateSunshine_async(self) -> bool:
         """
-        Update Sunshine to the latest version.
+        Update Sunshine to the latest version, and leave it running or stopped
+        as it was found.
         :return: True if the update was successful, False otherwise
         """
-        stopped = await self.stop_async()
-        if not stopped:
-            self.logger.error("Couldn't stop Sunshine for update")
-            return False
-        self.logger.info("Sunshine stopped for update. Installing update now...")
+        was_running = await self.isSunshineRunning_async()
+        if was_running:
+            stopped = await self.stop_async()
+            if not stopped:
+                self.logger.error("Couldn't stop Sunshine for update")
+                return False
+            self.logger.info("Sunshine stopped for update. Installing update now...")
+        else:
+            self.logger.info("Sunshine is not running. Installing update now...")
         installed = await self._to_thread(self._installOrUpdateSunshine)
         if not installed:
             self.logger.error("Couldn't update Sunshine")
             return False
+        if not was_running:
+            self.logger.info("Sunshine updated successfully. It was not running before, so it stays stopped")
+            return True
         self.logger.info("Sunshine updated successfully. Starting Sunshine now...")
         started = await self.start_async()
         if not started:

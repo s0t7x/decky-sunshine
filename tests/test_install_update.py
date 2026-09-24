@@ -8,7 +8,8 @@ they cannot log into and no way back short of reinstalling.
 
 A) ensureDependencies_async - the bwrap copy and the installation, in that order
 B) _initSunshine - the credentials a fresh installation gets
-C) updateSunshine_async - stop, update, start, and what each failure costs
+C) updateSunshine_async - stop, update, start, and what each failure costs;
+   a Sunshine that was not running is updated and left that way
 """
 import asyncio
 
@@ -297,8 +298,11 @@ async def test_the_credentials_end_up_in_the_log(initialise, logger):
 
 @pytest.fixture
 def updater(bare_controller):
-    def _make(stopped=True, installed=True, started=True):
+    def _make(running=True, stopped=True, installed=True, started=True):
         controller = bare_controller(steps=[])
+
+        async def is_running():
+            return running
 
         async def stop():
             controller.steps.append("stop")
@@ -312,6 +316,7 @@ def updater(bare_controller):
             controller.steps.append("start")
             return started
 
+        controller.isSunshineRunning_async = is_running
         controller.stop_async = stop
         controller._installOrUpdateSunshine = install
         controller.start_async = start
@@ -355,3 +360,25 @@ async def test_an_update_that_installed_but_will_not_start_reports_failure(updat
     assert await controller.updateSunshine_async() is False
     assert "Sunshine updated successfully. Starting Sunshine now..." in logger.infos
     assert "Couldn't start Sunshine after update" in logger.errors
+
+
+async def test_a_stopped_sunshine_is_updated_and_left_stopped(updater, logger):
+    """The update restores what it found. Starting a Sunshine the user had
+    stopped would also leave it running against the stored intent, until the
+    next reboot quietly stops it again."""
+    controller = updater(running=False)
+
+    assert await controller.updateSunshine_async() is True
+    assert controller.steps == ["install"]
+    assert logger.infos == [
+        "Sunshine is not running. Installing update now...",
+        "Sunshine updated successfully. It was not running before, so it stays stopped",
+    ]
+
+
+async def test_a_failed_update_of_a_stopped_sunshine_is_reported(updater, logger):
+    controller = updater(running=False, installed=False)
+
+    assert await controller.updateSunshine_async() is False
+    assert controller.steps == ["install"]
+    assert "Couldn't update Sunshine" in logger.errors
