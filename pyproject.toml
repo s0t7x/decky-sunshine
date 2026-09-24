@@ -26,7 +26,7 @@ omit = ["tests/*", ".venv-tests/*", "*/site-packages/*"]
 precision = 2
 # The ratchet - see tests/README.md. tools/coverage.sh raises it after a
 # better run; it never moves down.
-fail_under = 99.78
+fail_under = 99.79
 show_missing = true
 skip_empty = true
 
