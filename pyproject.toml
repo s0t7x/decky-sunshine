@@ -26,17 +26,14 @@ omit = ["tests/*", ".venv-tests/*", "*/site-packages/*"]
 precision = 2
 # The ratchet - see tests/README.md. tools/coverage.sh raises it after a
 # better run; it never moves down.
-fail_under = 99.78
+fail_under = 99.79
 show_missing = true
 skip_empty = true
 
 [tool.mutmut]
-# main.py only: mutmut cannot see py_modules/sunshine.py, because it names
-# mutants after the file path while everything imports that module as plain
-# "sunshine". tests/README.md has the detail.
-source_paths = ["main.py"]
-# sunshine.py still has to be there for the tests to import, just not mutated.
-also_copy = ["py_modules"]
+# sunshine.py is reached only because tests/conftest.py imports it as
+# py_modules.sunshine - see there before changing either.
+source_paths = ["main.py", "py_modules/sunshine.py"]
 # A mutant on a line no test reaches survives for free and says nothing about
 # the tests, so it is not worth the seconds it costs to run.
 mutate_only_covered_lines = true

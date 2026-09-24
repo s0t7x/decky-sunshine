@@ -11,14 +11,27 @@ name: Mutation testing
 on:
   push:
     branches: [main]
+    # The code, the tests, and everything the two tools are installed and
+    # configured from: an upgrade can break a run without a line of code
+    # changing (under Vitest 5 nearly every mutant survives, and the run
+    # reports no error). The release job's version bump in package.json starts no
+    # run - pushes with the GITHUB_TOKEN never do.
     paths:
       - 'src/**'
       - 'py_modules/**'
       - 'main.py'
       - 'tests/**'
       - 'requirements-test.txt'
-      # NOT package.json: the release job commits a version bump touching
-      # nothing else, and that run would cancel the one for the real merge
+      - 'pyproject.toml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'stryker.config.json'
+      - 'vitest.config.ts'
+      - 'tsconfig.json'
+      - '.github/workflows/mutation.yml'
+      # Last, so that it wins over the lines above: the READMEs under tests/
+      - '!**/*.md'
   workflow_dispatch:
 
 concurrency:

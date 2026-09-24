@@ -33,8 +33,9 @@ export default defineConfig({
       // branches is not 100 because of the tool, not the tests. From Vitest 4
       // on, coverage-v8 remaps through ast-v8-to-istanbul, and that remapper
       // loses the implicit else of an if when a ternary with an await in both
-      // arms sits in front of it. index.tsx:88-89 is the only place in src
-      // with that shape, and both of its arms are exercised (panel-controls
+      // arms sits in front of it. The start/stop call in toggleSunshine
+      // (index.tsx) is the only place in src with that shape, and both of its
+      // arms are exercised (panel-controls
       // "start fails" / "stop fails" and the two counting tests above them).
       // Reduced to: ternary + await + if-without-else reports 5/6 branches,
       // the same code without the ternary reports 4/4. Vitest 3 counted it as
@@ -43,7 +44,7 @@ export default defineConfig({
       thresholds: {
         autoUpdate: true,
         statements: 100,
-        branches: 99.27,
+        branches: 99.28,
         functions: 100,
         lines: 100,
       },

@@ -143,6 +143,18 @@ def test_the_deepest_mount_is_found_among_forty_others(make_controller):
     assert controller._findMountEntry("/home/deck/x")[0] == "/home"
 
 
+
+def test_of_two_mounts_on_the_same_point_the_later_one_counts(make_controller):
+    """The Deck stacks binfmt_misc on top of an autofs trigger at the same
+    mount point, and /proc/self/mounts lists them in mount order - so the
+    later line is the one that is actually there. The two disagree on the
+    very thing this lookup exists for: the autofs line is not nosuid, the
+    binfmt_misc line on top of it is."""
+    controller = make_controller(mounts=DECK_MOUNTS)
+
+    assert controller._findMountEntry("/proc/sys/fs/binfmt_misc/status") == \
+        ("/proc/sys/fs/binfmt_misc", "binfmt_misc", "rw,nosuid,nodev,noexec,relatime")
+
 def test_the_deck_puts_tmp_on_a_nosuid_mount(make_controller):
     """Which is why the copy is not there any more: the legacy location was
     inside the plugin runtime directory, and every /tmp-shaped fallback has the
@@ -471,7 +483,9 @@ def test_a_healthy_environment_logs_no_error(log_environment, tmp_path):
         "the mount line must not claim nosuid when it is not"
     # These four are the whole point of the section: a bug report starts by
     # reading them, so each is pinned as the reader will see it.
-    assert "Environment: OS: SteamOS (ID=steamos)" in log.infos
+    assert ("Environment: OS: SteamOS (ID=steamos, VERSION_ID=3.8.16, "
+            "BUILD_ID=20260716.1)") in log.infos, \
+        "PRETTY_NAME is just \"SteamOS\" on a Deck - the version has to come from elsewhere"
     assert "Environment: PULSE_SERVER: unix:/x" in log.infos
     assert "Environment: External display: not connected" in log.infos
     assert f"Environment: bwrap copy target {tmp_path}: mount {tmp_path} (tmpfs)" in log.infos
@@ -589,6 +603,16 @@ def test_an_unset_library_path_is_logged_as_such(log_environment, tmp_path):
     assert any("LD_LIBRARY_PATH: <unset>" in line for line in log.infos)
 
 
+
+def test_version_keys_a_distribution_does_not_set_are_left_out(log_environment, tmp_path):
+    """A rolling release has a BUILD_ID and no VERSION_ID. Left out rather
+    than printed as "unknown", which would read as a lookup that failed."""
+    log = log_environment(mounts_for(tmp_path),
+                          os_release={"ID": "arch", "PRETTY_NAME": "Arch Linux",
+                                      "BUILD_ID": "rolling"})
+
+    assert "Environment: OS: Arch Linux (ID=arch, BUILD_ID=rolling)" in log.infos
+
 def test_a_steamos_deck_draws_no_warning_about_the_platform(log_environment, tmp_path):
     log = log_environment(mounts_for(tmp_path))
 
@@ -604,7 +628,8 @@ def test_another_distribution_is_flagged_without_being_refused(log_environment, 
 
     assert ("OS is not SteamOS - this plugin makes Steam-Deck-specific assumptions "
             "that may not hold here") in log.warnings
-    assert "Environment: OS: SteamOS (ID=bazzite)" in log.infos
+    assert ("Environment: OS: SteamOS (ID=bazzite, VERSION_ID=3.8.16, "
+            "BUILD_ID=20260716.1)") in log.infos
     assert log.errors == []
 
 

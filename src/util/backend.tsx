@@ -70,9 +70,11 @@ class Backend {
         return result === true;
     }
 
+    // Whether the backend stored the value. It answers with the value itself,
+    // so `=== true` would report every switch-off as a failure.
     public setForceComposition = async (enabled: boolean): Promise<boolean> => {
         const result = await this.call<[enabled: boolean], boolean>("set_force_composition", enabled);
-        return result === true;
+        return result === enabled;
     }
 
     // Preserves the pre-@decky/api error contract: a failed backend call is

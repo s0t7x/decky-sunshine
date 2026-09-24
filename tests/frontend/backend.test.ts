@@ -81,6 +81,21 @@ describe("boolean methods", () => {
   });
 });
 
+describe("setForceComposition", () => {
+  // main.py answers with the value it stored, so a switch-off that worked
+  // comes back as false. Read as "true means it worked", that would be
+  // indistinguishable from a failure.
+  it("reports a switch-off the backend confirmed as success", async () => {
+    setCallHandler(() => false);
+    await expect(backend.setForceComposition(false)).resolves.toBe(true);
+  });
+
+  it("does not take a different stored value for success", async () => {
+    setCallHandler(() => true);
+    await expect(backend.setForceComposition(false)).resolves.toBe(false);
+  });
+});
+
 describe("what the bridge writes to the console", () => {
   it("names the method that failed, the error, and the plugin it came from", async () => {
     // The tag is what makes the line findable at all: the Steam client's

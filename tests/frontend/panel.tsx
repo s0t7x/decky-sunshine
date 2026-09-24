@@ -46,6 +46,8 @@ export function answerWith(answers: Record<string, unknown> = {}) {
     is_sunshine_running: true,
     are_credentials_valid: true,
     get_force_composition: false,
+    // main.py answers with the value it stored
+    set_force_composition: (args: unknown[]) => args[0],
     get_sunshine_version_info: IDLE_VERSION,
     get_web_ui_info: { ip: "192.168.1.38", editing_ready: true },
   };

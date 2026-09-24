@@ -87,13 +87,13 @@ in `vitest.config.ts`. A better run raises it, a worse one fails. That is what
 catches a deleted test: removing one changes no production line, so a check
 that only looks at the diff has nothing to look at.
 
-Both are currently at the top of their range (99.79% combined for Python, 100%
-for the frontend on statements, functions and lines), so there is no headroom
-left: a new production line without a test fails the gate rather than merely
-eating into a margin. The frontend branch threshold is the one exception at
-99.27%, and it is not a gap in the tests - from Vitest 4 on the v8 remapper
-miscounts one branch in `index.tsx`; `vitest.config.ts` has the reduced case,
-and `autoUpdate` raises the number back to 100 on its own once that is fixed.
+Both floors are kept where the suite is - raised by a local run (CI never
+raises), so there is no headroom: a new production line without a test fails
+the gate rather than merely eating into a margin. The frontend branch
+threshold sits a fraction under 100% for a reason that is not a gap in the
+tests - from Vitest 4 on the v8 remapper miscounts one branch in `index.tsx`;
+`vitest.config.ts` has the reduced case, and `autoUpdate` raises the number
+back to 100 on its own once that is fixed.
 That is the ratchet working as asked for, and the `coverage-override` label
 below is the way past it when a change is worth merging anyway.
 
@@ -121,44 +121,30 @@ mutmut show <mutant>      # the diff for one of them
 pnpm run mutation         # frontend (Stryker)
 ```
 
-**`py_modules/sunshine.py` is not covered by a plain `mutmut run`,** but it has
-been measured. Two assumptions in mutmut 3.8 are hardwired and together they
-lose the file:
-
-* `utils/format_utils.py::get_mutant_name` derives the module name from the
-  *file path* and strips exactly one prefix, `src.`. Ours becomes
-  `py_modules.sunshine`.
-* `utils/file_utils.py::setup_source_paths` puts exactly `.`, `src` and
-  `source` on the sandbox's `sys.path`.
-
-At run time the trampoline records `orig.__module__`, which is plain
-`sunshine`, because the Decky loader puts `py_modules` on `sys.path` rather
-than treating it as a package. The two keys never meet and every mutant there
+**`py_modules/sunshine.py` is mutated only because of how the tests import
+it.** mutmut 3.8 names each mutant after the *file path* - here
+`py_modules.sunshine` - and matches it against the `__module__` the function
+reports at run time. The Decky loader puts `py_modules` on `sys.path` and
+`main.py` does `import sunshine`, so a test suite that imports it the same way
+reports plain `sunshine`, the two keys never meet, and every mutant in the file
 comes back "no tests". (mutmut has a check for exactly this,
 `_check_test_to_mutant_associations`, but it only fires when *no* key matches -
-`main.py`'s do, so it stays quiet.) A directory on `sys.path` holding a
-top-level module is ordinary Python; mutmut supports one spelling of it.
+`main.py`'s do, so it would stay quiet.)
 
-**To measure it anyway**, four temporary changes, none of them committed:
+`tests/conftest.py` therefore loads the file as `py_modules.sunshine` - a
+namespace package, no `__init__.py` - and registers the same module object
+under `sunshine` in `sys.modules`, which is what `main.py` and the tests then
+get. Nothing in the shipped plugin changes. A test that loaded the file some
+other way - by path through `importlib.util`, or after removing the
+`sys.modules` entry - would get a second copy of the module, and patch one
+while the code under test ran the other.
 
-1. `ln -s py_modules/sunshine.py sunshine.py` in the repository root,
-2. `source_paths = ["main.py", "sunshine.py"]`,
-3. `also_copy = []` - otherwise the unmutated copy under `mutants/py_modules/`
-   wins the import,
-4. in `tests/conftest.py`, swap the two `sys.path` entries so the root comes
-   before `py_modules`.
+A full run takes a few minutes. The current numbers are in the summary of the
+latest *Mutation testing* run in CI rather than here, where they would be out
+of date after the next change.
 
-That gives 2385 mutants, 0 uncovered, about three minutes. The last run:
-**2300 killed, 76 survived, 9 timeouts.** The suite is green in that
-configuration too.
-
-Whether to make this permanent is open: the symlink is production surface
-(`decky plugin build` packs it). The alternatives are making `py_modules` a
-real package, a purpose-built `tools/mutation.py`, or cosmic-ray.
-
-On `main.py` the current state is 550 mutants, 539 killed, 11 survived (98%).
-Every one of the eleven has been looked at, and all eleven are equivalent -
-the mutated code cannot behave differently from the original:
+The survivors in `main.py` have each been looked at, and all of them are
+equivalent - the mutated code cannot behave differently from the original:
 
 * `last_attempt = 0.0` &rarr; `None` / `1.0` (2). Never read before it is
   assigned: the only read is guarded by `attempts and ...`, and `attempts` is
@@ -187,50 +173,50 @@ pads it with `XX...XX`, and only an assertion on the entire line kills that
 one. Changing a message is therefore expected to break a test - that is the
 test doing its job, not brittleness.
 
-### The 76 that survive in `sunshine.py` and `main.py`
+### What survives in `sunshine.py`
 
-Eleven are in `main.py` and listed above. The rest fall into a handful of
-kinds, all of them equivalent unless noted:
+Every survivor there falls into one of these kinds, all of them equivalent
+unless noted. One that does not is either a missing assertion or a new kind,
+and a new kind gets written down here with its reasoning:
 
-* **Case of a name that is matched case-insensitively** (~14): HTTP header
+* **Case of a name that is matched case-insensitively**: HTTP header
   names (`"Accept"` &rarr; `"ACCEPT"`), which urllib normalises, and codec
   names (`'utf-8'` &rarr; `'UTF-8'`), which Python's codec lookup does.
-* **`XX…XX` inside a character set** (~4): `rstrip("/")` &rarr;
+* **`XX…XX` inside a character set**: `rstrip("/")` &rarr;
   `rstrip("XX/XX")` adds `X` to the set. Only a path or value ending in `X`
   would tell them apart.
-* **A fallback string that the surrounding code never renders** (~20): the
+* **A fallback string that the surrounding code never renders**: the
   `'second'`/`'seconds'` halves that the fixed `wait_time` at each site never
   reaches, and `(result or "")` &rarr; `"XXXX"`, where neither spelling
   matches anything.
-* **Falsy replaced by falsy** (~8): `None` for `False` or `""` in values that
+* **Falsy replaced by falsy**: `None` for `False` or `""` in values that
   are only ever tested for truthiness.
-* **Loop guards that cannot differ** (~6): `while retry_count > 0` &rarr;
+* **Loop guards that cannot differ**: `while retry_count > 0` &rarr;
   `>= 0`, where the body always returns or breaks at zero, and `tick += 1`
   &rarr; `-= 1` under a `% 6 == 0` test.
-* **`split("-", 1)` losing its maxsplit** (2): DRM connector directories are
+* **`split("-", 1)` losing its maxsplit**: DRM connector directories are
   `card0-eDP-1`, and every maxsplit gives a segment with the same prefix.
 * **A handful of others** where a test would have to be built around a value
-  nobody would write (a mount point ending in `X`, two mount points of equal
-  length, a `getattr` default spelled two ways).
+  nobody would write (a mount point ending in `X`, a `getattr` default spelled
+  two ways).
 
 Nothing in that list is a missing assertion. What *was* missing is now
 covered: the exact command line of every `flatpak`, `su` and `cp` call and the
 `context=` each carries into the log; the environment and session Sunshine is
 spawned with; the glob patterns the sysfs and `/run/user` searches use; the
-HTTP headers; the socket family, type and timeout of both probes; and every
+HTTP headers; the socket kind, address and timeout of every probe; and every
 log line.
 
-Stryker's number for the frontend is 80%, out of 625 mutants: 496 killed,
-124 survived, 5 runtime errors. `src/util` is at 100%. Counted out:
+The frontend's survivors, from Stryker, fall into three kinds:
 
-* **103** change a value in an inline style object - a colour, a width, a gap,
-  a border radius - or a `bottomSeparator`. Cosmetic; no test should care.
-* **11** are equivalent under the test stubs: `focusable={false}` on a `Field`
-  (7 - the stub discards the prop) and a `useEffect` dependency array `[]`
-  given one constant entry (4 - React compares by value, and a literal array
-  is stable either way).
-* **10** are equivalent for a reason that needs the surrounding code to see,
-  so they are written down here rather than re-derived every time:
+* A changed value in an inline style object - a colour, a width, a gap, a
+  border radius - or a `bottomSeparator`. Cosmetic; no test should care.
+* Equivalent under the test stubs: `focusable={false}` on a `Field` (the stub
+  discards the prop) and a `useEffect` dependency array `[]` given one
+  constant entry (React compares by value, and a literal array is stable
+  either way).
+* Equivalent for a reason that needs the surrounding code to see, so they are
+  written down here rather than re-derived every time:
   - `setSunshineUpdateVersion(null)` and both `setGetCredentialsReturnedValue(
     null)` can be deleted. Each is either overwritten before anything renders
     again, or its value is only read behind a flag the line above already
@@ -248,16 +234,17 @@ is pinned by a test, and so are the `console` lines: the Steam client's console
 is the frontend's only diagnostic channel, so `LOG_TAG` and each message are
 asserted whole, the same rule as the backend log above.
 
-Do not chase this number between runs - Stryker reclassifies a handful of
-mutants between "survived" and "runtime error" from one run to the next, which
-moves the percentage by a point or two without anything having changed.
+Do not chase Stryker's number between runs - it reclassifies a handful of
+mutants between "survived", "timeout" and "runtime error" from one run to the
+next, which moves the percentage by a point or two without anything having
+changed.
 
-It runs in CI on pushes to `main` that touch code, and reports rather than
-gates - it takes minutes rather than seconds, and its number moves for reasons
-that are nobody's fault.
+It runs in CI on pushes to `main` that touch code, tests or the tools'
+configuration, and reports rather than gates - it takes minutes rather than
+seconds, and its number moves for reasons that are nobody's fault.
 
 Expect survivors that are not worth fixing, particularly in the frontend: a
 changed pixel value in an inline style, or a Steam prop the stubs discard,
 produces a mutant no test should care about. Judge the list, don't chase the
 number - and when a survivor turns out to be equivalent rather than untested,
-write down why, next to the eleven above.
+write down why, in the lists above.

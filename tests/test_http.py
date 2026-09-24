@@ -336,7 +336,7 @@ def test_a_non_ok_status_is_a_plain_failure(api, logger):
     result = controller._request("/api/apps")
 
     assert (result.ok, result.error) == (False, RequestError.OTHER)
-    assert ("Request to path '/api/apps' with data 'None' failed with code: 503"
+    assert ("Request to path '/api/apps' failed with code: 503"
             in logger.errors)
 
 
@@ -360,20 +360,21 @@ def test_another_http_error_is_not_an_authentication_problem(api, logger):
 
     assert result.is_unauthorized() is False
     assert result.error == RequestError.OTHER
-    assert ("HTTP error in request to path '/api/apps' with data 'None', "
+    assert ("HTTP error in request to path '/api/apps', "
             "code: 500, reason: Server Error") in logger.errors
 
 
 def test_a_refused_connection_means_sunshine_is_not_up_yet(api, logger):
-    """_initSunshine waits on exactly this while the Web UI is still coming
-    up after a fresh install."""
+    """Told apart from other failures, though no caller acts on the
+    difference today: start_async waits for the port before any request is
+    made, and _initSunshine retries on every failure alike."""
     # No errno, so only the ConnectionRefusedError branch can catch it;
     # test_a_refusal_reported_as_a_plain_oserror_counts_too covers the other.
     controller = api(raises=URLError(ConnectionRefusedError("Connection refused")))
 
     assert controller._request("/api/apps").is_unreachable() is True
-    assert ("Server not reachable when requesting path '/api/apps' with data "
-            "'None': Connection refused") in logger.errors
+    assert ("Server not reachable when requesting path '/api/apps': "
+            "Connection refused") in logger.errors
 
 
 def test_a_refusal_reported_as_a_plain_oserror_counts_too(api):
@@ -422,7 +423,7 @@ def test_another_url_error_is_not_a_refusal(api, logger):
 
     assert result.is_unreachable() is False
     assert result.error == RequestError.OTHER
-    assert ("URL error in request to path '/api/apps' with data 'None', "
+    assert ("URL error in request to path '/api/apps', "
             "reason: [Errno 113] No route to host") in logger.errors
 
 
@@ -433,8 +434,27 @@ def test_a_body_that_is_not_json_is_an_error_not_a_crash(api, logger):
 
     assert (result.ok, result.error) == (False, RequestError.OTHER)
     assert logger.raised_with_traceback(
-        "An error occurred when performing a request to path '/api/apps' with data 'None'")
+        "An error occurred when performing a request to path '/api/apps'")
 
+
+
+def test_a_failed_request_keeps_its_body_out_of_the_log(api, logger):
+    """/api/password carries the new and the current password, and users
+    attach this log to bug reports. The body is left out altogether rather
+    than filtered: these lines only fire when the transport fails, which the
+    body never explains, and a filter would have to be told about every new
+    endpoint that carries a secret."""
+    controller = api(FakeResponse(code=503))
+
+    controller._request("/api/password", {"newUsername": "deck",
+                                          "newPassword": "s3cret-new",
+                                          "confirmNewPassword": "s3cret-new",
+                                          "currentUsername": "deck",
+                                          "currentPassword": "s3cret-old"})
+
+    assert ("Request to path '/api/password' failed with code: 503"
+            in logger.errors)
+    assert not any("s3cret" in line for line in logger.all())
 
 # --- C) what gets sent --------------------------------------------------------
 

@@ -16,10 +16,12 @@ log is the whole explanation of a minute spent waiting - and is checked as
 part of each gate.
 """
 import asyncio
+import socket
 import subprocess
 
 import pytest
 
+import sunshine as sunshine_module
 from sunshine import SunshineController
 
 
@@ -224,7 +226,8 @@ def spawn_controller(logger, bin_without_drm_info):
     class SpawnController(SunshineController):
         def __init__(self, ever_runs=True, already_running=False,
                      force_composition=False, root_steps_succeed=True,
-                     setuid_effective=True, failing_step=None):
+                     setuid_effective=True, failing_step=None,
+                     web_ui_after=0, exits_while_starting=False):
             self.logger = logger
             self.environment_variables = {"PATH": str(bin_without_drm_info),
                                           "FLATPAK_BWRAP": "/nonexistent/bwrap"}
@@ -240,6 +243,11 @@ def spawn_controller(logger, bin_without_drm_info):
             self._failing_step = failing_step
             self._setuid_effective = setuid_effective
             self.composition_applications = 0
+            # How many probes find the port closed before it opens; None for
+            # a Web UI that never comes up.
+            self._web_ui_after = web_ui_after
+            self.web_ui_checks = 0
+            self._exits_while_starting = exits_while_starting
 
         async def isSunshineRunning_async(self):
             # False at the entry check, True once spawned, so start_async
@@ -248,7 +256,14 @@ def spawn_controller(logger, bin_without_drm_info):
             if not self._ever_runs:
                 return False
             was_running, self._seen_running = self._seen_running, True
+            if was_running and self._exits_while_starting and self.running_checks > 2:
+                # Found once by the wait for the process, gone after that
+                return False
             return was_running
+
+        def _isWebUiReachable(self):
+            self.web_ui_checks += 1
+            return self._web_ui_after is not None and self.web_ui_checks > self._web_ui_after
 
         def _isAudioAvailable(self):
             return True
@@ -351,7 +366,8 @@ async def test_a_sunshine_that_never_comes_up_reports_failure(
     limiting anything."""
     assert await spawn_controller(ever_runs=False).start_async() is False
     assert "Aborting wait for Sunshine process to start." in logger.errors
-    assert "Sunshine process not found yet. Checking again in 0.25 seconds" in logger.infos
+    assert not any("not found yet" in line for line in logger.all()), \
+        "one line for the outcome, not one per quarter second"
 
 
 async def test_the_wait_for_the_process_is_bounded_at_twenty_retries(
@@ -367,6 +383,129 @@ async def test_the_wait_for_the_process_is_bounded_at_twenty_retries(
     assert no_sleep == [0.25] * 19, "quarter-second steps, so about five seconds"
 
     assert controller.running_checks == 21
+
+
+
+@pytest.fixture
+def clock(monkeypatch):
+    """A monotonic clock that only the (instant) sleeps move forward, so a
+    wait bounded in seconds ends in a test and reports a known duration."""
+
+    class Clock:
+        now = 1000.0
+        slept = []
+
+    async def instant(seconds):
+        Clock.slept.append(seconds)
+        Clock.now += seconds
+
+    monkeypatch.setattr(sunshine_module.time, "monotonic", lambda: Clock.now)
+    monkeypatch.setattr(asyncio, "sleep", instant)
+    Clock.slept = []
+    return Clock
+
+
+async def test_a_start_reports_back_only_once_the_web_ui_answers(
+        spawn_controller, recorded_spawn, clock, logger):
+    """The process shows up in flatpak ps a moment before its Web UI listens.
+    A start that returned then would let the panel's first status poll run
+    into a refused connection - an error in the log after every start, for
+    a Sunshine that was merely still coming up."""
+    controller = spawn_controller(web_ui_after=4)
+
+    assert await controller.start_async() is True
+    assert controller.web_ui_checks == 5
+    assert clock.slept == [0.25] * 4
+    assert "Sunshine's Web UI is up after 1.0 seconds" in logger.infos
+
+
+async def test_the_wait_for_the_process_reports_how_long_it_took(
+        spawn_controller, recorded_spawn, clock, logger):
+    await spawn_controller().start_async()
+
+    assert "Sunshine process found after 0.0 seconds" in logger.infos
+
+
+async def test_a_web_ui_that_never_answers_still_counts_as_started(
+        spawn_controller, recorded_spawn, clock, logger):
+    """The process is running, so failing the start would be the wrong
+    answer: a manual start would record "stop" as the user's intent and the
+    crash watch would not be armed for a Sunshine that is in fact up. The
+    warning is what makes the state findable."""
+    controller = spawn_controller(web_ui_after=None)
+
+    assert await controller.start_async() is True
+    assert 30 <= sum(clock.slept) < 30.25, "thirty seconds, in quarter steps"
+    assert set(clock.slept) == {0.25}
+    assert ("Sunshine is running, but its Web UI did not answer within 30 seconds"
+            in logger.warnings)
+    assert not any("Web UI is up" in line for line in logger.infos)
+
+
+async def test_a_sunshine_that_exits_while_its_web_ui_comes_up_is_a_failed_start(
+        spawn_controller, recorded_spawn, clock, logger):
+    """Seen at once rather than after the full thirty seconds: a Sunshine that
+    dies on startup should not leave the panel on "Starting" that long."""
+    controller = spawn_controller(web_ui_after=None, exits_while_starting=True)
+
+    assert await controller.start_async() is False
+    assert clock.slept == [], "noticed on the first look, not at the timeout"
+    assert "Sunshine exited before its Web UI came up" in logger.errors
+
+
+async def test_the_override_is_left_alone_when_sunshine_exits_while_starting(
+        spawn_controller, recorded_spawn, clock):
+    """Applied only to a Sunshine that came up: nothing would stream through
+    it, and nothing would release it either - the stop path only runs for a
+    Sunshine the panel believes is running."""
+    controller = spawn_controller(force_composition=True, web_ui_after=None,
+                                  exits_while_starting=True)
+
+    await controller.start_async()
+
+    assert controller.composition_applications == 0
+
+
+def test_a_listening_web_ui_port_counts_as_reachable(bare_controller):
+    """Against a real socket: the stubs above only say what start_async does
+    with the answer, not whether the answer is right."""
+    with socket.create_server(("127.0.0.1", 0)) as server:
+        controller = bare_controller(WebUiPort=server.getsockname()[1])
+
+        assert controller._isWebUiReachable() is True
+
+
+def test_a_closed_web_ui_port_does_not_count_as_reachable(bare_controller):
+    """Bound but not listening, which the kernel answers with a refusal - the
+    state of the port while Sunshine is still coming up. Held rather than
+    closed, so nothing else can start listening there meanwhile (and because
+    WSL's mirrored networking keeps accepting on a port that was just closed)."""
+    with socket.socket() as held:
+        held.bind(("127.0.0.1", 0))
+        controller = bare_controller(WebUiPort=held.getsockname()[1])
+
+        assert controller._isWebUiReachable() is False
+
+
+def test_the_web_ui_probe_gives_up_after_a_second(bare_controller, monkeypatch):
+    """On localhost a closed port is refused at once, but a firewall that drops
+    packets on lo makes a connect without a timeout hang for minutes - once per
+    quarter-second step, with the panel sitting at "Starting..." throughout."""
+    calls = []
+
+    class FakeConnection:
+        def close(self):
+            pass
+
+    def fake_create_connection(address, timeout=None):
+        calls.append((address, timeout))
+        return FakeConnection()
+
+    monkeypatch.setattr(sunshine_module.socket, "create_connection", fake_create_connection)
+    controller = bare_controller(WebUiPort=47990)
+
+    assert controller._isWebUiReachable() is True
+    assert calls == [(("127.0.0.1", 47990), 1)]
 
 
 async def test_a_spawn_that_raises_reports_failure(spawn_controller, monkeypatch, logger):

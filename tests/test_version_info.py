@@ -8,12 +8,23 @@ previous release - and it read as a rebuild of what was already installed.
 
 A) _getInstalledSunshineInfo - parse version and origin out of `flatpak info`
 B) _getRemoteUpdateInfo - an update must be reported even without a label
-C) getSunshineVersionInfo - refresh the appstream exactly when the label looks
-   stale, scoped to the origin remote, and never when nothing would be shown
+C) getSunshineVersionInfo - refresh the appstream only while an update is
+   pending and the data is a day old, scoped to the origin remote. Going by
+   the label instead ("missing, or the installed version") refreshed on every
+   panel open for as long as a rebuild went uninstalled - and Sunshine's
+   rebuilds have waited months for the next release.
 """
+import os
+
 import pytest
 
+import sunshine as sunshine_module
 from sunshine import SunshineController
+
+
+# What the clock reads during a test, so that ages are exact
+NOW = 1_800_000_000.0
+HOUR = 60 * 60
 
 
 # Real `flatpak info --system dev.lizardbyte.app.Sunshine` output from a Deck
@@ -46,17 +57,41 @@ org.mozilla.firefox
 """
 
 
+def timestamp_path(root, origin="flathub"):
+    """Where flatpak records a remote's last appstream refresh - its own
+    `.timestamp`, which it rewrites on every refresh that succeeds."""
+    return os.path.join(root, "appstream", origin, os.uname().machine, ".timestamp")
+
+
+def write_timestamp(root, age, origin="flathub"):
+    path = timestamp_path(root, origin)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    open(path, "w").close()
+    os.utime(path, (NOW - age, NOW - age))
+
+
 @pytest.fixture
-def make_controller(logger):
-    """Answers the two flatpak queries from a script and records every command."""
+def make_controller(logger, tmp_path, monkeypatch):
+    """Answers the two flatpak queries from a script and records every command.
+    The appstream data was refreshed an hour ago unless a test says otherwise
+    (None: never), and a refresh behaves like flatpak's: it rewrites the
+    timestamp."""
+    monkeypatch.setattr(sunshine_module.time, "time", lambda: NOW)
 
     class FakeController(SunshineController):
-        def __init__(self, info=INFO_OUTPUT, remote_ls=(REMOTE_LS_WITH_VERSIONS,)):
+        FlatpakSystemPath = str(tmp_path)
+
+        def __init__(self, info=INFO_OUTPUT, remote_ls=(REMOTE_LS_WITH_VERSIONS,),
+                     appstream_age=HOUR, refresh_succeeds=True, refresh_writes_timestamp=True):
             self.logger = logger
             self.calls = []
             self.contexts = []
             self._info = info
             self._remote_ls = list(remote_ls)
+            self._refresh_succeeds = refresh_succeeds
+            self._refresh_writes_timestamp = refresh_writes_timestamp
+            if appstream_age is not None:
+                write_timestamp(tmp_path, appstream_age)
 
         def _run_and_capture_stdout(self, args, context=None):
             self.calls.append(list(args))
@@ -71,7 +106,9 @@ def make_controller(logger):
         def _run_and_check(self, args, context=None):
             self.calls.append(list(args))
             self.contexts.append(context)
-            return True
+            if self._refresh_succeeds and self._refresh_writes_timestamp:
+                write_timestamp(tmp_path, 0, origin=args[3] if len(args) > 3 else "flathub")
+            return self._refresh_succeeds
 
         def appstream_refreshes(self):
             return [c for c in self.calls if c[:3] == ["flatpak", "update", "--appstream"]]
@@ -138,21 +175,6 @@ def test_the_update_query_asks_for_exactly_these_two_columns(make_controller):
     assert controller.contexts == ["checking for Sunshine updates"]
 
 
-def test_without_an_origin_every_remote_is_refreshed(make_controller, logger):
-    """`flatpak info` did not say where Sunshine came from, so the refresh
-    cannot be scoped - and the line has to say that rather than print None."""
-    controller = make_controller(info="Version: 2026.516.143833\n",
-                                 remote_ls=(REMOTE_LS_WITHOUT_VERSIONS,
-                                            REMOTE_LS_WITH_VERSIONS))
-
-    controller.getSunshineVersionInfo()
-
-    assert ("The update is labelled with no version - refreshing the appstream data "
-            "of every remote before trusting that") in logger.infos
-    assert controller.appstream_refreshes() == [["flatpak", "update", "--appstream"]], \
-        "and the command carries no remote either"
-
-
 def test_an_update_is_reported_even_without_a_label(make_controller):
     """The regression: no appstream cache means no version column, and the
     update is real regardless."""
@@ -181,8 +203,8 @@ def test_an_id_that_merely_contains_ours_is_not_a_match(make_controller):
 
 # --- C) the appstream refresh decision ----------------------------------------
 
-def test_a_fresh_label_needs_no_refresh(make_controller, logger):
-    controller = make_controller()
+def test_data_refreshed_within_the_day_is_trusted(make_controller, logger):
+    controller = make_controller(appstream_age=24 * HOUR - 1)
 
     result = controller.getSunshineVersionInfo()
 
@@ -192,33 +214,97 @@ def test_a_fresh_label_needs_no_refresh(make_controller, logger):
                       "update_version": "2026.914.233613"}
 
 
-def test_a_stale_label_triggers_one_scoped_refresh(make_controller):
-    """The state this exists for: the cache is stale, so the first read labels the update
-    with the installed version; after the refresh the real one appears."""
-    controller = make_controller(remote_ls=("dev.lizardbyte.app.Sunshine  2026.516.143833\n",
+def test_data_a_day_old_is_refreshed_once_and_scoped_to_the_origin(make_controller):
+    """A day, as flatpak's own FLATPAK_APPSTREAM_TTL: the label may name a
+    release that has since been superseded - here the refresh brings the
+    real one."""
+    controller = make_controller(appstream_age=24 * HOUR,
+                                 remote_ls=("dev.lizardbyte.app.Sunshine  2026.906.222525\n",
                                             REMOTE_LS_WITH_VERSIONS))
 
     result = controller.getSunshineVersionInfo()
 
     assert controller.appstream_refreshes() == [
         ["flatpak", "update", "--appstream", "flathub"]]
+    assert "refreshing Flatpak appstream data" in controller.contexts
     assert result["update_version"] == "2026.914.233613"
 
 
-def test_a_missing_label_gets_the_same_treatment(make_controller):
-    controller = make_controller(remote_ls=(REMOTE_LS_WITHOUT_VERSIONS,
-                                            REMOTE_LS_WITH_VERSIONS))
+def test_the_refresh_is_visible_in_the_log(make_controller, logger):
+    """It is the one branch that cannot be seen from the panel, so it has to be
+    readable in a log a user attaches to a bug report. The age is rounded to
+    the nearest hour: seven days and 31 minutes are 169 hours."""
+    controller = make_controller(appstream_age=7 * 24 * HOUR + 31 * 60)
+
+    controller.getSunshineVersionInfo()
+
+    assert logger.infos == [
+        "The update is labelled 2026.914.233613; refreshing the appstream data "
+        "of flathub, which is 169 hours old"]
+
+
+def test_data_that_was_never_refreshed_is_refreshed(make_controller, logger):
+    """No timestamp means no appstream refresh has ever succeeded here - and
+    after this one the timestamp is there, so there is nothing to warn about."""
+    controller = make_controller(appstream_age=None, remote_ls=(REMOTE_LS_WITHOUT_VERSIONS,
+                                                                REMOTE_LS_WITH_VERSIONS))
 
     result = controller.getSunshineVersionInfo()
 
-    assert len(controller.appstream_refreshes()) == 1
+    assert controller.appstream_refreshes() == [
+        ["flatpak", "update", "--appstream", "flathub"]]
+    assert logger.infos == [
+        "The update is labelled with no version; refreshing the appstream data "
+        "of flathub, which is of unknown age"]
+    assert logger.warnings == []
     assert result["update_version"] == "2026.914.233613"
 
 
+def test_a_timestamp_from_the_future_counts_as_outdated(make_controller):
+    """As flatpak treats it: a clock that was once ahead would otherwise keep
+    the data from ever being refreshed again."""
+    controller = make_controller(appstream_age=-1)
+
+    controller.getSunshineVersionInfo()
+
+    assert len(controller.appstream_refreshes()) == 1
+
+
+def test_a_timestamp_written_this_second_is_fresh(make_controller):
+    controller = make_controller(appstream_age=0)
+
+    controller.getSunshineVersionInfo()
+
+    assert controller.appstream_refreshes() == []
+
+
+def test_a_rebuild_does_not_refresh_while_the_data_is_fresh(make_controller):
+    """Same version on both sides - the label is right, and refreshing on every
+    panel open until the rebuild is installed would cost the most exactly when
+    nothing changes."""
+    controller = make_controller(remote_ls=("dev.lizardbyte.app.Sunshine  2026.516.143833\n",))
+
+    result = controller.getSunshineVersionInfo()
+
+    assert controller.appstream_refreshes() == []
+    assert (result["update_available"], result["update_version"]) == (True, "2026.516.143833")
+
+
+def test_a_missing_label_does_not_refresh_fresh_data(make_controller):
+    """Data refreshed an hour ago that has no label would have none after
+    another refresh either."""
+    controller = make_controller(remote_ls=(REMOTE_LS_WITHOUT_VERSIONS,))
+
+    result = controller.getSunshineVersionInfo()
+
+    assert controller.appstream_refreshes() == []
+    assert (result["update_available"], result["update_version"]) == (True, None)
+
+
 def test_no_pending_update_means_no_refresh(make_controller):
-    """Never pay for the refresh when nothing would be shown, whatever the
-    label says."""
-    controller = make_controller(remote_ls=("org.mozilla.firefox  156.0\n",))
+    """Never pay for the refresh when nothing would be shown, however old the
+    data is."""
+    controller = make_controller(appstream_age=None, remote_ls=("org.mozilla.firefox  156.0\n",))
 
     result = controller.getSunshineVersionInfo()
 
@@ -226,22 +312,23 @@ def test_no_pending_update_means_no_refresh(make_controller):
     assert (result["update_available"], result["update_version"]) == (False, None)
 
 
-def test_a_genuine_rebuild_stays_an_update_and_refreshes_only_once(make_controller):
-    """Same version on both sides even after the refresh."""
-    controller = make_controller(remote_ls=("dev.lizardbyte.app.Sunshine  2026.516.143833\n",))
-
-    result = controller.getSunshineVersionInfo()
-
-    assert len(controller.appstream_refreshes()) == 1
-    assert (result["update_available"], result["update_version"]) == (True, "2026.516.143833")
-
-
 def test_an_update_survives_a_label_that_is_still_missing_after_the_refresh(make_controller):
-    controller = make_controller(remote_ls=(REMOTE_LS_WITHOUT_VERSIONS,))
+    controller = make_controller(appstream_age=None, remote_ls=(REMOTE_LS_WITHOUT_VERSIONS,))
 
     result = controller.getSunshineVersionInfo()
 
     assert (result["update_available"], result["update_version"]) == (True, None)
+
+
+def test_an_update_survives_a_second_read_that_fails(make_controller):
+    """The second read is only there for the label. Whether an update exists
+    was answered by the first, and a second read that fails - the network
+    gone in between - would answer no."""
+    controller = make_controller(appstream_age=None, remote_ls=(REMOTE_LS_WITH_VERSIONS, None))
+
+    result = controller.getSunshineVersionInfo()
+
+    assert result["update_available"] is True
 
 
 def test_a_sunshine_that_is_not_installed_reports_nothing(make_controller):
@@ -252,25 +339,38 @@ def test_a_sunshine_that_is_not_installed_reports_nothing(make_controller):
         "current_version": None, "update_available": False, "update_version": None}
 
 
-def test_an_unknown_origin_falls_back_to_every_remote(make_controller):
-    """Rather than skipping the refresh and keeping the stale label."""
-    controller = make_controller(info="Version: 1.0\n",
-                                 remote_ls=("dev.lizardbyte.app.Sunshine\n",
-                                            REMOTE_LS_WITH_VERSIONS))
+def test_without_an_origin_every_remote_is_refreshed(make_controller, logger):
+    """`flatpak info` did not say where Sunshine came from, so there is no
+    timestamp to go by and the refresh cannot be scoped - and the line has to
+    say that rather than print None."""
+    controller = make_controller(info="Version: 2026.516.143833\n")
 
     controller.getSunshineVersionInfo()
 
-    assert controller.appstream_refreshes()[0] == ["flatpak", "update", "--appstream"]
+    assert controller.appstream_refreshes() == [["flatpak", "update", "--appstream"]]
+    assert logger.infos == [
+        "The update is labelled 2026.914.233613; refreshing the appstream data "
+        "of every remote, which is of unknown age"]
+    assert logger.warnings == [], "no remote, so no timestamp to have expected"
 
 
-def test_the_refresh_is_visible_in_the_log(make_controller, logger):
-    """It is the one branch that cannot be seen from the panel, so it has to be
-    readable in a log a user attaches to a bug report."""
-    controller = make_controller(remote_ls=(REMOTE_LS_WITHOUT_VERSIONS,
-                                            REMOTE_LS_WITH_VERSIONS))
+def test_a_timestamp_still_missing_after_a_refresh_is_a_warning(make_controller, logger, tmp_path):
+    """flatpak writes it on every refresh that succeeds, so its absence means
+    the path is wrong for this system - and every panel open with an update
+    pending will refresh again."""
+    controller = make_controller(appstream_age=None, refresh_writes_timestamp=False)
 
     controller.getSunshineVersionInfo()
 
-    assert ("The update is labelled with no version - refreshing the appstream data "
-            "of flathub before trusting that") in logger.infos
-    assert "refreshing Flatpak appstream data" in controller.contexts
+    assert logger.warnings == [
+        f"Refreshed the appstream data of flathub, but there is no timestamp at "
+        f"{timestamp_path(str(tmp_path))} - every check with an update pending will "
+        f"refresh it again"]
+
+
+def test_a_failed_refresh_is_no_reason_to_expect_a_timestamp(make_controller, logger):
+    controller = make_controller(appstream_age=None, refresh_succeeds=False)
+
+    controller.getSunshineVersionInfo()
+
+    assert logger.warnings == []

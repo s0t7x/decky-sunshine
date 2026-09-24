@@ -543,6 +543,38 @@ describe("the docked-image toggle", () => {
     await waitFor(() => expect(toggle().checked).toBe(true));
   });
 
+  it("goes back to what is stored when saving fails", async () => {
+    // Otherwise it shows "on" for a setting that was never saved, and the
+    // next time the panel opens it is off again with nothing said in between
+    await openPanel({ set_force_composition: () => { throw new Error("backend gone"); } });
+
+    fireEvent.click(toggle());
+
+    await waitFor(() => expect(countOf("get_force_composition")).toBe(2));
+    await waitFor(() => expect(toggle().checked).toBe(false));
+  });
+
+  it("shows a switch-off that failed as still on", async () => {
+    await openPanel({ get_force_composition: true,
+                      set_force_composition: () => { throw new Error("backend gone"); } });
+    await waitFor(() => expect(toggle().checked).toBe(true));
+
+    fireEvent.click(toggle());
+
+    await waitFor(() => expect(countOf("get_force_composition")).toBe(2));
+    await waitFor(() => expect(toggle().checked).toBe(true));
+  });
+
+  it("does not read the setting back after a save that worked", async () => {
+    await openPanel();
+
+    fireEvent.click(toggle());
+    await waitFor(() => expect(countOf("set_force_composition")).toBe(1));
+
+    expect(countOf("get_force_composition")).toBe(1);
+    expect(toggle().checked).toBe(true);
+  });
+
   it("explains itself on request, and only then", async () => {
     await openPanel();
     expect(screen.queryByText(/squeezed into part of the screen/)).toBeNull();

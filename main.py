@@ -347,8 +347,9 @@ class Plugin:
 
     async def update_sunshine(self):
         decky.logger.info("Updating Sunshine...")
-        # The update flow restarts Sunshine, so it picks up the origin ensured
-        # here; on failure the old instance may keep running without it.
+        # The update flow restarts a running Sunshine and leaves a stopped one
+        # to its next start - either way it picks up the origin ensured here.
+        # On failure the old instance may keep running without it.
         added_now = await self._ensure_csrf_allowed_origin()
         # The update stops Sunshine on purpose - the watchdog must not restart
         # it into the running installation.
@@ -374,8 +375,9 @@ class Plugin:
 
         if self.settingManager is None:
             decky.logger.info("Reading settings...")
+            # The constructor reads the file itself (and creates it, empty, on a
+            # fresh install), so there is no read() to call after it.
             self.settingManager = SettingsManager(name = "decky-sunshine", settings_directory=os.environ["DECKY_PLUGIN_SETTINGS_DIR"])
-            self.settingManager.read()
             decky.logger.info(f"Read settings")
             self._log_settings()
 

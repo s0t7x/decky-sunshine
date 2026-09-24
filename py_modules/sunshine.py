@@ -8,6 +8,7 @@ import json
 import ssl
 import asyncio
 import secrets
+import time
 import glob
 import socket
 import pwd
@@ -57,6 +58,11 @@ class SunshineController:
     # Sunshine runs as root, so its config lives in the root user's home
     SunshineConfigPath = "/root/.var/app/dev.lizardbyte.app.Sunshine/config/sunshine/sunshine.conf"
     WebUiPort = 47990
+    # The system installation, which is where Sunshine is installed
+    FlatpakSystemPath = "/var/lib/flatpak"
+    # How old flatpak lets a remote's appstream data get before a plain
+    # 'flatpak update' refreshes it (FLATPAK_APPSTREAM_TTL)
+    AppstreamMaxAge = 24 * 60 * 60
     logger = None
 
     authHeader = ""
@@ -244,7 +250,11 @@ class SunshineController:
         try:
             os_release = self._readOsRelease()
             os_id = os_release.get("ID", "unknown")
-            self.logger.info(f"Environment: OS: {os_release.get('PRETTY_NAME', 'unknown')} (ID={os_id})")
+            # On a Deck PRETTY_NAME is just "SteamOS", so the version and build
+            # only show up here
+            os_details = [f"ID={os_id}"] + [f"{key}={os_release[key]}" for key in ("VERSION_ID", "BUILD_ID")
+                                            if key in os_release]
+            self.logger.info(f"Environment: OS: {os_release.get('PRETTY_NAME', 'unknown')} ({', '.join(os_details)})")
             if os_id != "steamos":
                 self.logger.warning("OS is not SteamOS - this plugin makes Steam-Deck-specific assumptions that may not hold here")
 
@@ -333,7 +343,8 @@ class SunshineController:
     def _findMountEntry(self, path: str) -> tuple[str, str, str] | None:
         """
         Find the mount responsible for the given path (the path does not have
-        to exist yet) via the longest matching mount point in /proc/self/mounts.
+        to exist yet) via the longest matching mount point in /proc/self/mounts,
+        and the last one listed when several share it.
         :return: A tuple (mount_point, fstype, options), or None if it could not be determined
         """
         try:
@@ -347,7 +358,9 @@ class SunshineController:
                     # Special characters in mount points are octal-escaped (e.g. \040 for space)
                     mount_point = re.sub(r"\\([0-7]{3})", lambda m: chr(int(m.group(1), 8)), fields[1])
                     if real_path == mount_point or real_path.startswith(mount_point.rstrip("/") + "/"):
-                        if best is None or len(mount_point) > len(best[0]):
+                        # >=: a mount on top of another at the same point comes
+                        # later in the file, and it is the one that is there
+                        if best is None or len(mount_point) >= len(best[0]):
                             best = (mount_point, fields[2], fields[3])
             return best
         except Exception as e:
@@ -609,18 +622,53 @@ class SunshineController:
         # Wait for Sunshine to start
         retry_count = 20
         wait_time = 0.25
+        waiting_since = time.monotonic()
         while not await self.isSunshineRunning_async() and retry_count > 0:
             retry_count -= 1
             if retry_count == 0:
                 self.logger.error("Aborting wait for Sunshine process to start.")
                 return False
-            self.logger.info(f"Sunshine process not found yet. Checking again in {wait_time} {'second' if wait_time == 1 else 'seconds'}")
+            await asyncio.sleep(wait_time)
+        self.logger.info(f"Sunshine process found after {time.monotonic() - waiting_since:.1f} seconds")
+
+        # The process shows up a moment before the Web UI listens, and a start
+        # that reported back in that gap would send the panel's first status
+        # poll into a refused connection - an error in the log for a Sunshine
+        # that was merely still coming up. A Web UI that does not answer in
+        # time still counts as started, because the process is running:
+        # failing the start would record "stop" as the user's intent and leave
+        # the crash watch unarmed.
+        web_ui_timeout = 30
+        waiting_since = time.monotonic()
+        while True:
+            if await self._to_thread(self._isWebUiReachable):
+                self.logger.info(f"Sunshine's Web UI is up after {time.monotonic() - waiting_since:.1f} seconds")
+                break
+            if not await self.isSunshineRunning_async():
+                self.logger.error("Sunshine exited before its Web UI came up")
+                return False
+            if time.monotonic() - waiting_since >= web_ui_timeout:
+                self.logger.warning(f"Sunshine is running, but its Web UI did not answer within {web_ui_timeout} seconds")
+                break
             await asyncio.sleep(wait_time)
 
         if self.force_composition:
             await self._applyCompositionForce()
 
         return True
+
+    def _isWebUiReachable(self) -> bool:
+        """
+        Whether something accepts connections on the Web UI port. A plain TCP
+        connect rather than a request: a refused request is exactly what
+        _request logs as an error, and on localhost a closed port answers at
+        once, so this costs well under a millisecond either way.
+        """
+        try:
+            socket.create_connection(("127.0.0.1", self.WebUiPort), timeout=1).close()
+            return True
+        except OSError:
+            return False
 
     async def stop_async(self) -> bool:
         """
@@ -649,14 +697,14 @@ class SunshineController:
 
         retry_count = 20
         wait_time = 0.25
+        waiting_since = time.monotonic()
         while await self.isSunshineRunning_async() and retry_count > 0:
             retry_count -= 1
             if retry_count == 0:
                 self.logger.error("Aborting wait for Sunshine process to end.")
                 return False
-            self.logger.info(f"Sunshine process not ended yet. Checking again in {wait_time} {'second' if wait_time == 1 else 'seconds'}")
-
             await asyncio.sleep(wait_time)
+        self.logger.info(f"Sunshine process ended after {time.monotonic() - waiting_since:.1f} seconds")
 
         return True
 
@@ -918,29 +966,40 @@ class SunshineController:
           a quirk of remote-ls: remote-info drops its Version line entirely
           when the cache is gone, so there is no cache-free string to switch to.
         Hence decide from the summary, and refresh the appstream only when its
-        label is about to be shown and looks stale - scoped to the remote
-        Sunshine comes from, not to every remote installed.
+        label is about to be shown and the data is as old as flatpak itself
+        allows - scoped to the remote Sunshine comes from, not to every remote
+        installed. Not by what the label says: a rebuild carries the installed
+        version, and refreshing for it on every panel open would go on for as
+        long as it is not installed.
         :return: A dict with 'current_version', 'update_available' and
                  'update_version'
         """
         installed = self._getInstalledSunshineInfo()
         current_version = installed.get("version")
+        origin = installed.get("origin")
 
         update_available, update_version = self._getRemoteUpdateInfo()
 
-        # A label that is missing, or still names the installed version, is what
-        # a stale cache looks like: refresh once and re-read. One that is still
-        # unchanged afterwards is a real rebuild - same version, new commit.
-        if update_available and (update_version is None or update_version == current_version):
-            origin = installed.get("origin")
+        age = self._getAppstreamAge(origin) if origin else None
+        if update_available and (age is None or age >= self.AppstreamMaxAge):
             self.logger.info(
-                f"The update is labelled {update_version or 'with no version'} - refreshing the "
-                f"appstream data of {origin or 'every remote'} before trusting that"
+                f"The update is labelled {update_version or 'with no version'}; refreshing the "
+                f"appstream data of {origin or 'every remote'}, which is "
+                + ("of unknown age" if age is None else f"{age / 3600:.0f} hours old")
             )
-            self._run_and_check(
+            refreshed = self._run_and_check(
                 ["flatpak", "update", "--appstream"] + ([origin] if origin else []),
                 context="refreshing Flatpak appstream data"
             )
+            if refreshed and origin and not os.path.isfile(self._appstreamTimestampPath(origin)):
+                self.logger.warning(
+                    f"Refreshed the appstream data of {origin}, but there is no timestamp at "
+                    f"{self._appstreamTimestampPath(origin)} - every check with an update "
+                    f"pending will refresh it again"
+                )
+            # Only the label is read again. Whether there is an update was
+            # answered above, and a second read that fails - the network gone
+            # in between - would answer no and hide it.
             _, update_version = self._getRemoteUpdateInfo()
 
         return {
@@ -948,6 +1007,26 @@ class SunshineController:
             "update_available": update_available,
             "update_version": update_version
         }
+
+    def _appstreamTimestampPath(self, origin: str) -> str:
+        """
+        The file flatpak rewrites on every appstream refresh of a remote that
+        succeeds - it goes by this one itself (get_appstream_timestamp).
+        """
+        return os.path.join(self.FlatpakSystemPath, "appstream", origin, os.uname().machine, ".timestamp")
+
+    def _getAppstreamAge(self, origin: str) -> float | None:
+        """
+        How long ago the appstream data of a remote was last refreshed.
+        :return: The age in seconds, or None when it is not known: no refresh
+                 has succeeded yet, or the timestamp lies in the future, which
+                 flatpak treats as too old as well
+        """
+        try:
+            age = time.time() - os.stat(self._appstreamTimestampPath(origin)).st_mtime
+        except OSError:
+            return None
+        return age if age >= 0 else None
 
     def _getInstalledSunshineInfo(self) -> dict:
         """
@@ -996,18 +1075,26 @@ class SunshineController:
 
     async def updateSunshine_async(self) -> bool:
         """
-        Update Sunshine to the latest version.
+        Update Sunshine to the latest version, and leave it running or stopped
+        as it was found.
         :return: True if the update was successful, False otherwise
         """
-        stopped = await self.stop_async()
-        if not stopped:
-            self.logger.error("Couldn't stop Sunshine for update")
-            return False
-        self.logger.info("Sunshine stopped for update. Installing update now...")
+        was_running = await self.isSunshineRunning_async()
+        if was_running:
+            stopped = await self.stop_async()
+            if not stopped:
+                self.logger.error("Couldn't stop Sunshine for update")
+                return False
+            self.logger.info("Sunshine stopped for update. Installing update now...")
+        else:
+            self.logger.info("Sunshine is not running. Installing update now...")
         installed = await self._to_thread(self._installOrUpdateSunshine)
         if not installed:
             self.logger.error("Couldn't update Sunshine")
             return False
+        if not was_running:
+            self.logger.info("Sunshine updated successfully. It was not running before, so it stays stopped")
+            return True
         self.logger.info("Sunshine updated successfully. Starting Sunshine now...")
         started = await self.start_async()
         if not started:
@@ -1082,7 +1169,7 @@ class SunshineController:
             # overwrites a timeout attribute set on the Request object.
             with self.opener.open(request, timeout=5) as response:
                 if response.getcode() != OK:
-                    self.logger.error(f"Request to path '{path}' with data '{data}' failed with code: {response.getcode()}")
+                    self.logger.error(f"Request to path '{path}' failed with code: {response.getcode()}")
                     return RequestResult.failure(RequestError.OTHER)
                 encoding = response.headers.get_content_charset() or "utf-8"
                 content = response.read().decode(encoding)
@@ -1092,7 +1179,7 @@ class SunshineController:
             if e.code == UNAUTHORIZED:
                 return RequestResult.failure(RequestError.UNAUTHORIZED)
             else:
-                self.logger.error(f"HTTP error in request to path '{path}' with data '{data}', code: {e.code}, reason: {e.reason}")
+                self.logger.error(f"HTTP error in request to path '{path}', code: {e.code}, reason: {e.reason}")
                 return RequestResult.failure(RequestError.OTHER)
 
         except URLError as e:
@@ -1101,14 +1188,14 @@ class SunshineController:
             if isinstance(e.reason, ConnectionRefusedError) or (
                 isinstance(e.reason, OSError) and getattr(e.reason, "errno", None) == 111
             ):
-                self.logger.error(f"Server not reachable when requesting path '{path}' with data '{data}': Connection refused")
+                self.logger.error(f"Server not reachable when requesting path '{path}': Connection refused")
                 return RequestResult.failure(RequestError.UNREACHABLE)
             else:
-                self.logger.error(f"URL error in request to path '{path}' with data '{data}', reason: {e.reason}")
+                self.logger.error(f"URL error in request to path '{path}', reason: {e.reason}")
                 return RequestResult.failure(RequestError.OTHER)
 
         except Exception as e:
-            self.logger.exception(f"An error occurred when performing a request to path '{path}' with data '{data}'", exc_info=e)
+            self.logger.exception(f"An error occurred when performing a request to path '{path}'", exc_info=e)
             return RequestResult.failure(RequestError.OTHER)
 
     def _createRequest(self, path, data=None) -> Request:
