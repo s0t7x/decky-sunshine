@@ -239,9 +239,9 @@ mutants between "survived", "timeout" and "runtime error" from one run to the
 next, which moves the percentage by a point or two without anything having
 changed.
 
-It runs in CI on pushes to `main` that touch code, and reports rather than
-gates - it takes minutes rather than seconds, and its number moves for reasons
-that are nobody's fault.
+It runs in CI on pushes to `main` that touch code, tests or the tools'
+configuration, and reports rather than gates - it takes minutes rather than
+seconds, and its number moves for reasons that are nobody's fault.
 
 Expect survivors that are not worth fixing, particularly in the frontend: a
 changed pixel value in an inline style, or a Steam prop the stubs discard,
