@@ -523,6 +523,45 @@ class SunshineController:
             self.logger.exception("Could not update csrf_allowed_origins in sunshine.conf", exc_info=e)
             return previously_managed, False
 
+    def ensureSystemTrayDisabled(self) -> None:
+        """
+        Make sure Sunshine does not try to start its system tray. Under the
+        plugin it never can - Sunshine runs as root, without a desktop session
+        - and from 2026.929 on Sunshine shuts itself down when its tray loop
+        ends, which a tray that never started does at once. A missing key gets
+        `system_tray = disabled`; a key the user set is left alone, and one
+        that enables the tray is only warned about. Truthiness follows
+        Sunshine's to_bool (config.cpp), compared without regard to case.
+        Sunshine reads its config at startup, so call this before starting it.
+        """
+        try:
+            lines = []
+            if os.path.exists(self.SunshineConfigPath):
+                with open(self.SunshineConfigPath) as f:
+                    lines = f.read().splitlines()
+            for line in lines:
+                key, separator, value = line.partition("=")
+                if separator and key.strip() == "system_tray":
+                    value = value.strip().lower()
+                    if value in ("true", "yes", "enable", "enabled", "on") or "1" in value:
+                        self.logger.warning(
+                            "system_tray is enabled in sunshine.conf. Sunshine runs without a desktop here, "
+                            "so its tray cannot start, and from 2026.929 on Sunshine then shuts down right "
+                            "after starting. Set system_tray = disabled, or remove the line and the plugin "
+                            "will set it."
+                        )
+                    return
+            os.makedirs(os.path.dirname(self.SunshineConfigPath), exist_ok=True)
+            lines.append("system_tray = disabled")
+            with open(self.SunshineConfigPath, "w") as f:
+                f.write("\n".join(lines) + "\n")
+            self.logger.info(
+                "Set system_tray = disabled in sunshine.conf: Sunshine runs without a desktop "
+                "here, and from 2026.929 on it shuts down when its tray cannot start"
+            )
+        except OSError as e:
+            self.logger.exception("Could not check system_tray in sunshine.conf", exc_info=e)
+
     async def start_async(self) -> bool:
         """
         Start the Sunshine process.
@@ -603,13 +642,17 @@ class SunshineController:
         if not await self._to_thread(lambda: self._verifySetuidBit(bwrap_path)):
             return False
 
+        await self._to_thread(self.ensureSystemTrayDisabled)
+
         # Run Sunshine.
         # QT_QPA_PLATFORM: Sunshine's tray is Qt-based and aborts the whole
         # process when Qt finds no usable platform plugin. We run it as root
         # with no session of our own, so there is nothing for Qt to draw on -
         # say so explicitly rather than let it search and die. Sunshine detects
         # that situation itself when no display variable is set at all, but
-        # relying on that would make us depend on a check we do not own.
+        # relying on that would make us depend on a check we do not own. With
+        # system_tray disabled Qt is never started; this still covers a user
+        # who turns the tray back on.
         try:
             subprocess.Popen(["flatpak", "run", "--system", "--socket=wayland",
                               "--env=QT_QPA_PLATFORM=offscreen", self.SunshineFlatpakAppId],

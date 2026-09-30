@@ -10,6 +10,9 @@ B) The display gate - when drm_info is not installed the check can never
    succeed, so it has to be skipped rather than block Sunshine forever.
 C) The environment Sunshine is spawned with - its Qt tray aborts the whole
    process when Qt finds no usable platform plugin.
+D) The config Sunshine is spawned with - from 2026.929 on it shuts down when
+   its tray cannot start, and under the plugin it never can (the key itself is
+   tested in test_system_tray.py).
 
 A start that stalls at the gate shows the user nothing but "Stopped", so the
 log is the whole explanation of a minute spent waiting - and is checked as
@@ -219,7 +222,7 @@ async def test_the_display_gate_is_bounded_at_sixty_checks(
 # loop, so every start failed.
 
 @pytest.fixture
-def spawn_controller(logger, bin_without_drm_info):
+def spawn_controller(logger, bin_without_drm_info, tmp_path):
     """Stubbed down to everything start_async does between the gate and the
     spawn, so the Popen arguments are the only thing under test."""
 
@@ -231,6 +234,8 @@ def spawn_controller(logger, bin_without_drm_info):
             self.logger = logger
             self.environment_variables = {"PATH": str(bin_without_drm_info),
                                           "FLATPAK_BWRAP": "/nonexistent/bwrap"}
+            # start_async writes to Sunshine's config; the real one is root's.
+            self.SunshineConfigPath = str(tmp_path / "config" / "sunshine.conf")
             self.force_composition = force_composition
             self._seen_running = already_running
             self._ever_runs = ever_runs
@@ -357,6 +362,38 @@ async def test_no_display_is_handed_to_sunshine(spawn_controller, recorded_spawn
     assert "DISPLAY" not in recorded_spawn["env"], sorted(recorded_spawn["env"])
 
 
+
+
+# --- D) The config Sunshine is spawned with ------------------------------------
+
+async def test_the_tray_is_disabled_by_the_time_sunshine_is_spawned(spawn_controller,
+                                                                     monkeypatch):
+    """Sunshine reads its config once, at startup. Written a moment later, the
+    key only takes effect at the next start - and from 2026.929 on there would
+    not be one."""
+    controller = spawn_controller()
+    seen_at_spawn = {}
+
+    def fake_popen(args, env=None, start_new_session=None):
+        with open(controller.SunshineConfigPath) as f:
+            seen_at_spawn["config"] = f.read()
+
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
+
+    await controller.start_async()
+
+    assert seen_at_spawn["config"] == "system_tray = disabled\n"
+
+
+async def test_a_config_that_cannot_be_written_does_not_stop_the_start(
+        spawn_controller, recorded_spawn, tmp_path):
+    controller = spawn_controller()
+    blocked = tmp_path / "blocked.conf"
+    blocked.mkdir()
+    controller.SunshineConfigPath = str(blocked)
+
+    assert await controller.start_async() is True
+    assert recorded_spawn["args"][0] == "flatpak"
 
 
 async def test_a_sunshine_that_never_comes_up_reports_failure(
