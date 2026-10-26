@@ -98,6 +98,9 @@ class Plugin:
         starting = not await self.sunshineController.isSunshineRunning_async()
         added_now = await self._ensure_csrf_allowed_origin()
         res = await self.sunshineController.start_async()
+        if res:
+            self.settingManager.setSetting("hdrOriginal", self.sunshineController._hdr_original
+                                           if self.sunshineController._hdr_original is not None else -1)
         if starting and res:
             self.settingManager.setSetting("csrfRestartPending", False)
         elif added_now:
@@ -128,6 +131,18 @@ class Plugin:
     async def get_force_composition(self):
         return self.settingManager.getSetting("forceComposition", False)
 
+    async def set_disable_hdr(self, enabled):
+        self.settingManager.setSetting("disableHdr", enabled)
+        self.sunshineController.disable_hdr = enabled
+        if await self.sunshineController.isSunshineRunning_async():
+            await self.sunshineController.applyHdrPreference_async()
+            self.settingManager.setSetting("hdrOriginal", self.sunshineController._hdr_original
+                                           if self.sunshineController._hdr_original is not None else -1)
+        return enabled
+
+    async def get_disable_hdr(self):
+        return self.settingManager.getSetting("disableHdr", False)
+
     async def stop_sunshine(self):
         decky.logger.info("Stopping sunshine...")
         # Stopping is an intent, not a crash - end the watchdog before the
@@ -135,6 +150,7 @@ class Plugin:
         await self._cancel_crash_watch()
         res = await self.sunshineController.stop_async()
         if res:
+            self.settingManager.setSetting("hdrOriginal", -1)
             decky.logger.info("Sunshine stopped")
             self.settingManager.setSetting("lastRunState", "stop")
         else:
@@ -405,6 +421,13 @@ class Plugin:
         # Carry the persisted "force composition while streaming" preference into
         # the controller so the auto-start below (and any later start) applies it.
         self.sunshineController.force_composition = self.settingManager.getSetting("forceComposition", False)
+        self.sunshineController.disable_hdr = self.settingManager.getSetting("disableHdr", False)
+        self.sunshineController.loadHdrSnapshot(self.settingManager.getSetting("hdrOriginal", -1))
+
+        # Sunshine may have been started outside this plugin or survived a
+        # Decky loader restart. Capture/reconcile the HDR snapshot either way.
+        if await self.sunshineController.isSunshineRunning_async():
+            await self.sunshineController.applyHdrPreference_async()
 
         lastRunState = self.settingManager.getSetting("lastRunState", "")
         if lastRunState in ("start", ""):
@@ -438,7 +461,8 @@ class Plugin:
         decky.logger.info("Uninstalling Decky Sunshine...")
         try:
             self.sunshineController.dispatchUninstallCleanup(
-                os.path.join(decky.DECKY_PLUGIN_LOG_DIR, "uninstall-cleanup.log")
+                os.path.join(decky.DECKY_PLUGIN_LOG_DIR, "uninstall-cleanup.log"),
+                self.settingManager.getSetting("hdrOriginal", -1),
             )
         except Exception as e:
             decky.logger.error(f"Error dispatching the uninstall cleanup: {e}")

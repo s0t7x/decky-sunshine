@@ -40,6 +40,8 @@ const Content: FC = () => {
   const [getCredentialsReturnedValue, setGetCredentialsReturnedValue] = useState<boolean | null>(null);
   const [forceComposition, setForceComposition] = useState<boolean>(false);
   const [showCompositionHelp, setShowCompositionHelp] = useState<boolean>(false);
+  const [disableHdr, setDisableHdr] = useState<boolean>(false);
+  const [showDisableHdrHelp, setShowHdrDisableHelp] = useState<boolean>(false);
 
   const updateSunshineState = async () => {
     const isSunshineRunning = await backend.isSunshineRunning();
@@ -63,6 +65,10 @@ const Content: FC = () => {
 
   useEffect(() => {
     backend.getForceComposition().then(setForceComposition);
+  }, []);
+
+  useEffect(() => {
+    backend.getDisableHdr().then(setDisableHdr);
   }, []);
 
   useEffect(() => {
@@ -282,6 +288,21 @@ const Content: FC = () => {
             // running Sunshine
             if (!(await backend.setForceComposition(value))) {
               setForceComposition(await backend.getForceComposition());
+            }
+          }}
+        />
+      </PanelSectionRow>
+      <PanelSectionRow>
+        <ToggleField
+          label={<LabelWithInfo title="Disable HDR" onToggleHelp={() => setShowHdrDisableHelp(value => !value)} />}
+          description={showDisableHdrHelp
+            ? "Fixes HDR content looking washed out, too bright, or too dark when streaming."
+            : undefined}
+          checked={disableHdr}
+          onChange={async (value: boolean) => {
+            setDisableHdr(value);
+            if (!(await backend.setDisableHdr(value))) {
+              setDisableHdr(await backend.getDisableHdr());
             }
           }}
         />

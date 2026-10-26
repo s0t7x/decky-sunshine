@@ -86,6 +86,9 @@ class SunshineController:
         # (an extra fullscreen composite pass per frame instead of direct
         # scanout). See setCompositionForce() for the why.
         self.force_composition = False
+        # Disable HDR only while Sunshine is running.
+        self.disable_hdr = False
+        self._hdr_original = None
 
         # Watcher task following dock changes and re-asserting the composition
         # override after boot, see _applyCompositionForce()
@@ -572,6 +575,7 @@ class SunshineController:
             # still (re)apply the composition override so the atom matches the setting.
             if self.force_composition:
                 await self._applyCompositionForce()
+            await self.applyHdrPreference_async()
             return True
 
         retry_count = 60
@@ -697,6 +701,7 @@ class SunshineController:
 
         if self.force_composition:
             await self._applyCompositionForce()
+        await self.applyHdrPreference_async()
 
         return True
 
@@ -722,6 +727,12 @@ class SunshineController:
         # re-assert the old value concurrently to the release below.
         await self._cancelCompositionWatch()
 
+        # Restore gamescope HDR as stop begins, then again after Sunshine exits
+        # below. Some gamescope/session setups recreate this atom while
+        # Sunshine is being torn down.
+        if self._hdr_original == 1:
+            await self._restoreHdr_async()
+
         # Release the gamescope composition override when stopping, so the
         # direct-scanout power optimization is restored once we're not streaming.
         # Only when the override was (or may have been) applied: otherwise every
@@ -734,6 +745,7 @@ class SunshineController:
                 self._composition_applied = False
 
         if not await self.isSunshineRunning_async():
+            self._clearHdrSnapshot()
             return True
 
         await self._to_thread(lambda: self._run_and_check(["flatpak", "kill", self.SunshineFlatpakAppId], context="killing Sunshine via flatpak"))
@@ -748,6 +760,10 @@ class SunshineController:
                 return False
             await asyncio.sleep(wait_time)
         self.logger.info(f"Sunshine process ended after {time.monotonic() - waiting_since:.1f} seconds")
+
+        if self._hdr_original == 1:
+            await self._restoreHdr_async()
+        self._clearHdrSnapshot()
 
         return True
 
@@ -816,6 +832,66 @@ class SunshineController:
         Async variant of setCompositionForce that doesn't block the event loop.
         """
         return await self._to_thread(lambda: self.setCompositionForce(enabled))
+
+    def setHdrEnabled(self, enabled: bool) -> bool:
+        """Set gamescope's HDR state on the session user's XWayland display."""
+        value = "1" if enabled else "0"
+        username = self._getSessionUsername()
+        if not username:
+            self.logger.warning(f"No session user found for setting GAMESCOPE_DISPLAY_HDR_ENABLED={value}")
+            return False
+        cmd = [
+            "su", username, "-c",
+            "DISPLAY=:0 xprop -root -f GAMESCOPE_DISPLAY_HDR_ENABLED 32c "
+            "-set GAMESCOPE_DISPLAY_HDR_ENABLED " + value,
+        ]
+        return self._run_and_check(cmd, context=f"setting GAMESCOPE_DISPLAY_HDR_ENABLED={value}")
+
+    def _getHdrEnabled(self) -> int | None:
+        """Read gamescope's current HDR atom, or None when it is unavailable."""
+        username = self._getSessionUsername()
+        if not username:
+            return None
+        result = self._run_and_capture_stdout(
+            ["su", username, "-c", "DISPLAY=:0 xprop -root GAMESCOPE_DISPLAY_HDR_ENABLED"],
+            context="reading GAMESCOPE_DISPLAY_HDR_ENABLED",
+        )
+        if result is None:
+            return None
+        value_match = re.search(r"=\s*(\d+)", result)
+        return int(value_match.group(1)) if value_match else None
+
+    async def setHdrEnabled_async(self, enabled: bool) -> bool:
+        return await self._to_thread(lambda: self.setHdrEnabled(enabled))
+
+    async def _getHdrEnabled_async(self) -> int | None:
+        return await self._to_thread(self._getHdrEnabled)
+
+    async def applyHdrPreference_async(self) -> None:
+        """Apply the HDR preference while Sunshine is running."""
+        if self._hdr_original is None:
+            original = await self._getHdrEnabled_async()
+            if original is None:
+                self.logger.warning("Could not read GAMESCOPE_DISPLAY_HDR_ENABLED; leaving HDR unchanged")
+                return
+            self._hdr_original = original
+        if self.disable_hdr and self._hdr_original == 1:
+            await self.setHdrEnabled_async(False)
+        elif not self.disable_hdr and self._hdr_original == 1:
+            await self._restoreHdr_async()
+
+    async def _restoreHdr_async(self) -> None:
+        """Restore HDR only when it was enabled at Sunshine start."""
+        if self._hdr_original == 1:
+            await self.setHdrEnabled_async(True)
+
+    def _clearHdrSnapshot(self) -> None:
+        self._hdr_original = None
+
+    def loadHdrSnapshot(self, original: int | None) -> None:
+        """Restore a captured pre-stream HDR value after a plugin restart."""
+        if original in (0, 1):
+            self._hdr_original = original
 
     async def applyCompositionPreference_async(self) -> None:
         """
@@ -1495,7 +1571,7 @@ class SunshineController:
             result = False
         return result
 
-    def dispatchUninstallCleanup(self, log_path: str) -> bool:
+    def dispatchUninstallCleanup(self, log_path: str, hdr_original: int | None = None) -> bool:
         """
         Stop Sunshine and release the composition override from a detached
         helper process during plugin uninstall. Stopping in-process is not
@@ -1521,6 +1597,11 @@ class SunshineController:
                 f'{shlex.join(["su", username, "-c"])} "DISPLAY=:0 xprop -root '
                 '-f GAMESCOPE_COMPOSITE_FORCE 32c -set GAMESCOPE_COMPOSITE_FORCE 0"\n'
             )
+            if hdr_original in (0, 1):
+                script += (
+                    f'{shlex.join(["su", username, "-c"])} "DISPLAY=:0 xprop -root '
+                    f'-f GAMESCOPE_DISPLAY_HDR_ENABLED 32c -set GAMESCOPE_DISPLAY_HDR_ENABLED {hdr_original}"\n'
+                )
         else:
             script += 'echo "no session user found - not touching the composition override"\n'
         script += 'echo "$(date) - uninstall cleanup done"\n'

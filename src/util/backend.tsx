@@ -77,6 +77,16 @@ class Backend {
         return result === enabled;
     }
 
+    public getDisableHdr = async (): Promise<boolean> => {
+        const result = await this.call<[], boolean>("get_disable_hdr");
+        return result === true;
+    }
+
+    public setDisableHdr = async (enabled: boolean): Promise<boolean> => {
+        const result = await this.call<[enabled: boolean], boolean>("set_disable_hdr", enabled);
+        return result === enabled;
+    }
+
     // Preserves the pre-@decky/api error contract: a failed backend call is
     // logged and mapped to null instead of throwing, so callers can keep
     // treating null/false as "failed".
